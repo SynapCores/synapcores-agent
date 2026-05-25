@@ -1,0 +1,4 @@
+# synapcores-agent has ZERO runtime dependencies (stdlib only).
+# This file exists for convenience / parity with tooling that expects it.
+# For development (tests), install:
+#   pip install -e ".[dev]"
