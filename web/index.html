@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Northwind — Customer Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- ============================ LEFT: chat widget ===================== -->
+    <section class="chat-pane">
+      <header class="chat-header">
+        <div class="brand">
+          <div class="avatar" id="brandAvatar">🎧</div>
+          <div class="brand-text">
+            <div class="brand-title" id="brandTitle">Support</div>
+            <div class="brand-sub">Customer Support</div>
+          </div>
+        </div>
+        <div class="header-right">
+          <span class="status"><span class="dot"></span> Online</span>
+          <span class="demo-pill">DEMO</span>
+        </div>
+      </header>
+
+      <div class="messages" id="messages">
+        <!-- messages injected here -->
+      </div>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <input
+          type="text"
+          id="input"
+          class="composer-input"
+          placeholder="Type your message…"
+          aria-label="Type your message"
+        />
+        <button type="submit" id="send" class="send-btn" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"
+            />
+          </svg>
+        </button>
+      </form>
+    </section>
+
+    <!-- ============================ RIGHT: Brain sidebar ================== -->
+    <aside class="brain-pane">
+      <header class="brain-header">
+        <div class="brain-title">🧠 SynapCores — what the brain is doing</div>
+        <div class="brain-meta">
+          <span class="badge" id="dimBadge">embed dim —</span>
+          <span class="badge badge-src" id="srcBadge">LLM —</span>
+        </div>
+      </header>
+
+      <div class="brain-body" id="brainBody">
+        <div class="brain-idle" id="brainIdle">
+          Waiting for the first turn…<br />
+          <span class="brain-idle-sub"
+            >recall · RAG · routing · memory writeback — all in-engine</span
+          >
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

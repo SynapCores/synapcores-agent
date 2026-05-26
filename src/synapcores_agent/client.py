@@ -142,14 +142,19 @@ class SynapCoresClient:
         )
 
     # ----------------------------------------------------------- convenience
-    def embed_dim(self, text: str = "probe") -> int:
-        """Return the embedding dimensionality (used for sanity checks)."""
-        # COSINE_SIMILARITY of a vector with itself is 1.0 — confirms EMBED works.
-        res = self.execute(
-            f"SELECT COSINE_SIMILARITY(EMBED('{sql_quote(text)}'), "
-            f"EMBED('{sql_quote(text)}')) AS s"
-        )
-        return res.scalar()
+    def embedding_dim(self, text: str = "probe") -> int:
+        """Return the live embedding dimensionality of the configured model.
+
+        Probes the gateway directly with ``vector_dims(EMBED(...))`` so the
+        agent can size its vector columns to whatever embedding model the
+        gateway is configured to use: the bundled MiniLM (384) out of the box,
+        or 1536 if the operator points ``[query.ai_service]`` at OpenAI, etc.
+        This is what makes the agent embedding-model-agnostic (BYO model /
+        production). Also doubles as an EMBED-works sanity check — it raises if
+        EMBED is misconfigured.
+        """
+        res = self.execute(f"SELECT vector_dims(EMBED('{sql_quote(text)}')) AS d")
+        return int(res.scalar())
 
     def generate(self, prompt: str) -> str:
         """Run the bundled GENERATE LLM against a prompt; returns the text.

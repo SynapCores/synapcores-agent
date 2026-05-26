@@ -1,5 +1,9 @@
 # synapcores-agent
 
+> **A real customer-support agent where the *database* is the memory.** Watch the chat on the left; watch the engine remember, retrieve, and route on the right.
+
+![SynapCores chat widget with a live Brain debug sidebar — gpt-4o demo](docs/demo/support-chat.gif)
+
 A **real, framework-free AI agent** whose brain is **[SynapCores](https://synapcores.com)**.
 
 Most "AI agent" stacks bolt together a vector DB, a graph DB, a cache, an LLM,

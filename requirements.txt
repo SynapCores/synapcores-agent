@@ -1,4 +1,10 @@
-# synapcores-agent has ZERO runtime dependencies (stdlib only).
+# The core synapcores-agent has ZERO runtime dependencies (stdlib only).
 # This file exists for convenience / parity with tooling that expects it.
-# For development (tests), install:
-#   pip install -e ".[dev]"
+#
+# For development (tests):              pip install -e ".[dev]"
+# For the browser chat widget:         pip install -e ".[web]"
+# For the session recorder:            pip install -e ".[record]"  &&  playwright install chromium
+#
+# The browser chat widget + recorder add the following (kept out of the core):
+aiohttp>=3.9
+# playwright>=1.40   # only needed to RECORD a session (scripts/record_chat.py)

@@ -2,6 +2,7 @@
 
 Usage:
     python -m synapcores_agent              # interactive chat (REPL)
+    python -m synapcores_agent chat         # browser chat widget + Brain sidebar
     python -m synapcores_agent --seed       # load the demo KB + tickets, then chat
     python -m synapcores_agent --reset      # drop the agent's tables, then exit
     python -m synapcores_agent --ask "..."  # single question, print reply, exit
@@ -44,12 +45,30 @@ def _print_trace(turn: Turn) -> None:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="synapcores_agent")
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        default="repl",
+        choices=["repl", "chat"],
+        help="'repl' (default) for the terminal REPL, 'chat' for the browser widget",
+    )
     parser.add_argument("--seed", action="store_true", help="load demo KB + tickets first")
     parser.add_argument("--reset", action="store_true", help="drop the agent's tables and exit")
     parser.add_argument("--ask", metavar="TEXT", help="ask one question and exit")
     parser.add_argument("--trace", action="store_true", help="print each loop step")
     parser.add_argument("--user", default=None, help="user id for memory scope")
+    parser.add_argument("--port", type=int, default=8810, help="port for the 'chat' web widget")
+    parser.add_argument(
+        "--no-open", action="store_true", help="don't auto-open a browser (chat mode)"
+    )
     args = parser.parse_args(argv)
+
+    # Browser chat widget — serves the two-pane UI + Brain sidebar.
+    if args.mode == "chat":
+        from .web import serve
+
+        serve(port=args.port, open_browser=not args.no_open)
+        return 0
 
     config = Config.from_env()
     try:

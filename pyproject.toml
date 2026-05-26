@@ -17,13 +17,18 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-# Intentionally ZERO runtime dependencies — the agent talks to SynapCores over
-# plain HTTP using only the Python standard library. That is the point: the
-# brain is SynapCores, not a pile of framework packages.
+# Intentionally ZERO runtime dependencies for the core agent — it talks to
+# SynapCores over plain HTTP using only the Python standard library. That is the
+# point: the brain is SynapCores, not a pile of framework packages. The browser
+# chat widget adds aiohttp (see the [web] extra); the recorder adds Playwright.
 dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+# Browser chat widget (python -m synapcores_agent chat): aiohttp server + WS.
+web = ["aiohttp>=3.9"]
+# Self-driving session recorder (scripts/record_chat.py).
+record = ["aiohttp>=3.9", "playwright>=1.40"]
 
 [project.scripts]
 synapcores-agent = "synapcores_agent.__main__:main"

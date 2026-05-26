@@ -26,13 +26,29 @@ from typing import Any, Dict, List, Optional
 
 from .client import QueryResult, SynapCoresClient, sql_quote
 
-EMBED_DIM = 384  # MiniLM, the CE default embedding model
+DEFAULT_EMBED_DIM = 384  # MiniLM, the CE default; the live probe overrides it
 
 
 class Brain:
     def __init__(self, client: SynapCoresClient, namespace: str = "support_agent") -> None:
         self.c = client
         self.ns = namespace
+        self._embed_dim: Optional[int] = None
+
+    @property
+    def embed_dim(self) -> int:
+        """The configured embedding model's dimensionality — probed once, cached.
+
+        Lets the same agent run on the bundled MiniLM (384) or any BYO
+        embedding model (e.g. OpenAI text-embedding-3, 1536) with no code
+        change. Falls back to the CE default if the probe is unavailable.
+        """
+        if self._embed_dim is None:
+            try:
+                self._embed_dim = self.c.embedding_dim()
+            except Exception:
+                self._embed_dim = DEFAULT_EMBED_DIM
+        return self._embed_dim
 
     # ----------------------------------------------------------------- tables
     @property
@@ -48,14 +64,21 @@ class Brain:
         return f"{self.ns}_tickets"
 
     def ensure_schema(self) -> None:
-        """Create the agent's tables if they don't exist (idempotent)."""
+        """Create the agent's tables if they don't exist (idempotent).
+
+        Vector columns are sized to the *live* embedding model (probed via
+        ``self.embed_dim``), so the same agent works on the bundled MiniLM
+        (384) or any BYO embedding model (e.g. OpenAI, 1536) without a code
+        change — the embedding-agnostic / production path.
+        """
+        dim = self.embed_dim
         self.c.execute(
             f"""CREATE TABLE IF NOT EXISTS {self.t_memory} (
                 id INTEGER PRIMARY KEY,
                 user_id VARCHAR(128),
                 role VARCHAR(16),
                 content TEXT,
-                embedding VECTOR({EMBED_DIM}),
+                embedding VECTOR({dim}),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )"""
         )
@@ -64,7 +87,7 @@ class Brain:
                 id INTEGER PRIMARY KEY,
                 title VARCHAR(255),
                 body TEXT,
-                embedding VECTOR({EMBED_DIM}),
+                embedding VECTOR({dim}),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )"""
         )
@@ -74,7 +97,7 @@ class Brain:
                 subject VARCHAR(255),
                 problem TEXT,
                 resolution TEXT,
-                embedding VECTOR({EMBED_DIM}),
+                embedding VECTOR({dim}),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )"""
         )
