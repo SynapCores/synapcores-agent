@@ -1,0 +1,19 @@
+{
+  "name": "@synapcores/widget",
+  "version": "0.1.0-sprint0",
+  "description": "Drop-in chat widget powered by SynapCores. Sprint 0 spike.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/widget.js",
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "node build.mjs",
+    "build:watch": "node build.mjs --watch",
+    "dev": "node build.mjs --watch & python3 -m http.server 5050 --directory dev"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.0"
+  }
+}

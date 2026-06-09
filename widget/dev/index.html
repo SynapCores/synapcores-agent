@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@synapcores/widget — Sprint 0 dev page</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        max-width: 720px;
+        margin: 60px auto;
+        padding: 20px;
+        color: #111;
+        line-height: 1.6;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 0.95em;
+      }
+      pre {
+        background: #f3f4f6;
+        padding: 12px;
+        border-radius: 6px;
+        overflow-x: auto;
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #00bfff;
+        color: white;
+        font-size: 0.75em;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+    </style>
+  </head>
+  <body>
+    <p><span class="pill">Sprint 0 dev</span></p>
+    <h1>@synapcores/widget — spike</h1>
+    <p>
+      This page is a fresh static HTML host that script-tags the freshly-built
+      widget. If the floating chat button shows up bottom-right, opens a panel,
+      and an end-to-end <code>turn → reply</code> round-trip works against the
+      v1 backend at <code>ws://localhost:8810/ws</code>, Sprint 0 is done.
+    </p>
+
+    <h3>Run the v1 backend first</h3>
+    <pre><code>cd ../../  # repo root
+python -m synapcores_agent.web   # serves at http://localhost:8810</code></pre>
+
+    <h3>Then build the widget and open this page</h3>
+    <pre><code>cd widget
+npm install      # one-time
+npm run build    # writes dist/widget.js
+npm run dev      # rebuild on change + serve this page at :5050</code></pre>
+
+    <p>
+      Visit <a href="http://localhost:5050/">http://localhost:5050/</a> and click
+      the chat button. The first message should arrive after one Brain loop
+      cycle (recall → RAG → route → generate). Open DevTools → Network → WS
+      to watch the wire frames.
+    </p>
+
+    <hr />
+    <p style="color: #6b7280; font-size: 0.9em">
+      The script tag below is the entire install. <code>data-backend</code> is
+      the WebSocket URL. Everything else is optional and overrides defaults.
+    </p>
+
+    <!-- The 1-line install — autoInit() picks up the data-* attrs. -->
+    <script
+      defer
+      src="../dist/widget.js"
+      data-backend="ws://localhost:8810/ws"
+      data-agent-name="Spike"
+      data-greeting="Hi — this is the Sprint 0 widget talking to the v1 backend. Ask me anything."
+    ></script>
+  </body>
+</html>
