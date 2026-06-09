@@ -1,5 +1,7 @@
-/* Scoped under .sc-widget-root so host-site styles can't bleed in and
-   widget styles can't bleed out. No global selectors. */
+/* @synapcores/widget — scoped styles.
+ * Everything lives under .sc-widget-root so host-site rules can't bleed in
+ * and our rules can't bleed out. No global selectors. No CSS reset on body.
+ */
 
 .sc-widget-root {
   --sc-primary: #00bfff;
@@ -7,13 +9,30 @@
   --sc-fg: #111418;
   --sc-muted: #6b7280;
   --sc-border: #e5e7eb;
-  --sc-bubble-user: #00bfff;
+  --sc-bubble-user: var(--sc-primary);
+  --sc-bubble-user-fg: #ffffff;
   --sc-bubble-agent: #f3f4f6;
+  --sc-bubble-agent-fg: #111418;
+  --sc-status-bg: #fff7ed;
+  --sc-status-fg: #9a3412;
+  --sc-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   color: var(--sc-fg);
   box-sizing: border-box;
+}
+.sc-widget-root.sc-theme-dark {
+  --sc-bg: #0f1115;
+  --sc-fg: #e5e7eb;
+  --sc-muted: #9ca3af;
+  --sc-border: #2a2f37;
+  --sc-bubble-agent: #1c2026;
+  --sc-bubble-agent-fg: #e5e7eb;
+  --sc-status-bg: #2b1d0a;
+  --sc-status-fg: #fcd34d;
+  --sc-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
 }
 .sc-widget-root *,
 .sc-widget-root *::before,
@@ -21,10 +40,19 @@
   box-sizing: inherit;
 }
 
+/* ---------- position variants ---------- */
+.sc-widget-root.sc-pos-br .sc-launcher { bottom: 20px; right: 20px; }
+.sc-widget-root.sc-pos-br .sc-panel    { bottom: 90px; right: 20px; }
+.sc-widget-root.sc-pos-bl .sc-launcher { bottom: 20px; left: 20px; }
+.sc-widget-root.sc-pos-bl .sc-panel    { bottom: 90px; left: 20px; }
+.sc-widget-root.sc-pos-tr .sc-launcher { top: 20px; right: 20px; }
+.sc-widget-root.sc-pos-tr .sc-panel    { top: 90px; right: 20px; }
+.sc-widget-root.sc-pos-tl .sc-launcher { top: 20px; left: 20px; }
+.sc-widget-root.sc-pos-tl .sc-panel    { top: 90px; left: 20px; }
+
+/* ---------- launcher ---------- */
 .sc-launcher {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -37,10 +65,14 @@
   align-items: center;
   justify-content: center;
   z-index: 999999;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .sc-launcher:hover {
   transform: scale(1.05);
+}
+.sc-launcher:focus-visible {
+  outline: 3px solid rgba(0, 0, 0, 0.25);
+  outline-offset: 2px;
 }
 .sc-launcher svg {
   width: 26px;
@@ -48,26 +80,31 @@
   fill: currentColor;
 }
 
+/* ---------- panel ---------- */
 .sc-panel {
   position: fixed;
-  bottom: 90px;
-  right: 20px;
-  width: 360px;
-  height: 540px;
+  width: 380px;
+  height: 600px;
   max-height: calc(100vh - 110px);
   background: var(--sc-bg);
   border: 1px solid var(--sc-border);
   border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--sc-shadow);
   display: none;
   flex-direction: column;
   overflow: hidden;
   z-index: 999999;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 .sc-panel.sc-open {
   display: flex;
+  opacity: 1;
+  transform: translateY(0);
 }
 
+/* ---------- header ---------- */
 .sc-header {
   padding: 12px 14px;
   background: var(--sc-primary);
@@ -76,62 +113,149 @@
   align-items: center;
   justify-content: space-between;
   font-weight: 600;
+  font-size: 15px;
+  flex: 0 0 auto;
 }
+.sc-title { color: #fff; }
 .sc-header-close {
   background: transparent;
   border: none;
   color: #fff;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 22px;
   line-height: 1;
-  padding: 4px 8px;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.sc-header-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+.sc-header-close:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 2px;
 }
 
+/* ---------- status banner ---------- */
+.sc-status {
+  display: none;
+  padding: 6px 12px;
+  background: var(--sc-status-bg);
+  color: var(--sc-status-fg);
+  font-size: 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--sc-border);
+  flex: 0 0 auto;
+}
+.sc-status.sc-status-show {
+  display: block;
+}
+
+/* ---------- messages ---------- */
 .sc-messages {
-  flex: 1;
+  flex: 1 1 auto;
   padding: 14px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  background: var(--sc-bg);
 }
 .sc-bubble {
   max-width: 80%;
   padding: 8px 12px;
   border-radius: 14px;
   word-wrap: break-word;
-  white-space: pre-wrap;
 }
 .sc-bubble-user {
   align-self: flex-end;
   background: var(--sc-bubble-user);
-  color: #fff;
+  color: var(--sc-bubble-user-fg);
   border-bottom-right-radius: 4px;
 }
 .sc-bubble-agent {
   align-self: flex-start;
   background: var(--sc-bubble-agent);
-  color: var(--sc-fg);
+  color: var(--sc-bubble-agent-fg);
   border-bottom-left-radius: 4px;
 }
+/* markdown elements rendered inside bubbles — minimal styling */
+.sc-bubble-agent p { margin: 0 0 8px 0; }
+.sc-bubble-agent p:last-child { margin-bottom: 0; }
+.sc-bubble-agent code {
+  background: rgba(0, 0, 0, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+.sc-widget-root.sc-theme-dark .sc-bubble-agent code {
+  background: rgba(255, 255, 255, 0.1);
+}
+.sc-bubble-agent pre {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin: 6px 0;
+  overflow-x: auto;
+  font-size: 0.9em;
+}
+.sc-widget-root.sc-theme-dark .sc-bubble-agent pre {
+  background: rgba(255, 255, 255, 0.06);
+}
+.sc-bubble-agent pre code {
+  background: transparent;
+  padding: 0;
+}
+.sc-bubble-agent a {
+  color: var(--sc-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sc-bubble-agent strong { font-weight: 600; }
+.sc-bubble-agent em { font-style: italic; }
+
+/* ---------- thinking dots ---------- */
 .sc-thinking {
   align-self: flex-start;
-  color: var(--sc-muted);
-  font-style: italic;
-  font-size: 13px;
-  padding: 4px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--sc-bubble-agent);
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+}
+.sc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sc-muted);
+  display: inline-block;
+  animation: sc-pulse 1.2s ease-in-out infinite;
+}
+.sc-dot:nth-child(2) { animation-delay: 0.18s; }
+.sc-dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes sc-pulse {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.45; }
+  40% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-dot { animation: none; opacity: 0.7; }
+  .sc-panel { transition: none; }
 }
 
+/* ---------- composer ---------- */
 .sc-composer {
   border-top: 1px solid var(--sc-border);
   padding: 10px;
   display: flex;
   gap: 8px;
   background: var(--sc-bg);
+  flex: 0 0 auto;
 }
 .sc-input {
   flex: 1;
-  padding: 8px 10px;
+  padding: 9px 11px;
   border: 1px solid var(--sc-border);
   border-radius: 6px;
   font: inherit;
@@ -139,11 +263,17 @@
   background: var(--sc-bg);
   color: var(--sc-fg);
 }
+.sc-input::placeholder { color: var(--sc-muted); }
 .sc-input:focus {
   border-color: var(--sc-primary);
+  box-shadow: 0 0 0 2px rgba(0, 191, 255, 0.18);
+}
+.sc-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .sc-send {
-  padding: 8px 14px;
+  padding: 9px 16px;
   background: var(--sc-primary);
   color: #fff;
   border: none;
@@ -152,11 +282,19 @@
   font: inherit;
   font-weight: 600;
 }
+.sc-send:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+.sc-send:focus-visible {
+  outline: 3px solid rgba(0, 0, 0, 0.2);
+  outline-offset: 2px;
+}
 .sc-send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* ---------- footer ---------- */
 .sc-footer {
   padding: 6px 10px;
   border-top: 1px solid var(--sc-border);
@@ -164,11 +302,30 @@
   font-size: 11px;
   color: var(--sc-muted);
   background: var(--sc-bg);
+  flex: 0 0 auto;
 }
 .sc-footer a {
   color: var(--sc-muted);
   text-decoration: none;
 }
-.sc-footer a:hover {
-  color: var(--sc-primary);
+.sc-footer a:hover { color: var(--sc-primary); }
+
+/* ---------- mobile: full-screen overlay ---------- */
+@media (max-width: 480px) {
+  .sc-widget-root .sc-panel {
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+  .sc-widget-root .sc-launcher {
+    /* Keep the launcher reachable but slightly smaller on phones. */
+    width: 52px;
+    height: 52px;
+  }
 }

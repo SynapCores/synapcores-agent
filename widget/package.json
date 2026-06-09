@@ -1,7 +1,7 @@
 {
   "name": "@synapcores/widget",
-  "version": "0.1.0-sprint0",
-  "description": "Drop-in chat widget powered by SynapCores. Sprint 0 spike.",
+  "version": "0.1.0-mvp",
+  "description": "Drop-in chat widget powered by SynapCores. Sprint 1 MVP.",
   "private": true,
   "license": "MIT",
   "type": "module",

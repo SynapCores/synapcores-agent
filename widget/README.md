@@ -3,9 +3,11 @@
 Drop-in chat widget powered by SynapCores. Embed it on any site with one
 `<script>` tag; the SynapCores engine is the brain.
 
-> **Status — Sprint 0 spike** (v0.1.0-sprint0). This is the scaffold that proves
-> the wire works end-to-end against the existing v1 backend. Sprint 1 hardens
-> the UI; Sprints 2-4 add multi-tenant, config surface, and CDN distribution.
+> **Status — Sprint 1 MVP** (v0.1.0-mvp). The Sprint 0 spike's wire is now
+> wrapped in a polished UI: theming, dark/light auto, mobile full-screen,
+> animated typing dots, markdown rendering, ARIA focus trap + ESC, and
+> exponential-backoff reconnect. Sprint 2 adds multi-tenant project keying;
+> Sprint 3 adds identity + persistent conversation; Sprint 4 ships CDN + npm.
 
 ---
 
@@ -19,19 +21,25 @@ Drop-in chat widget powered by SynapCores. Embed it on any site with one
 ></script>
 ```
 
-That's the whole install. The widget renders a floating launcher button in the
-bottom-right, opens a chat panel on click, and connects to the backend you
-point it at. Bring-your-own backend: see `synapcores-agent` for the Python
-runtime that serves the WebSocket.
+That's the whole install. The widget renders a floating launcher button (you
+choose the corner), opens a chat panel on click, and connects to the backend
+you point it at. **Bring-your-own backend** — see `synapcores-agent` for the
+Python runtime that serves the WebSocket.
+
+---
 
 ## Config (via `data-*` attributes)
 
-| Attribute         | Default      | Notes                                          |
-| ----------------- | ------------ | ---------------------------------------------- |
-| `data-backend`    | _(required)_ | WS URL of the synapcores-agent backend         |
-| `data-project`    | _(none)_     | Project id; ignored in Sprint 0, used Sprint 2 |
-| `data-agent-name` | `Support`    | Header label                                   |
-| `data-greeting`   | sensible     | First message shown when the panel opens       |
+| Attribute              | Default          | Notes                                                    |
+| ---------------------- | ---------------- | -------------------------------------------------------- |
+| `data-backend`         | _(required)_     | WS URL of the synapcores-agent backend                   |
+| `data-project`         | _(none)_         | Project id; passed through but ignored until Sprint 2    |
+| `data-agent-name`      | `Support`        | Header label                                             |
+| `data-greeting`        | sensible default | First message shown when the panel opens                 |
+| `data-primary-color`   | `#00bfff`        | Any CSS color string — applied as a CSS custom property  |
+| `data-position`        | `bottom-right`   | `bottom-right` / `bottom-left` / `top-right` / `top-left`|
+| `data-theme`           | `auto`           | `light` / `dark` / `auto` (follows prefers-color-scheme) |
+| `data-show-branding`   | `true`           | Set `false` to hide the "Powered by SynapCores" footer   |
 
 ## Config (via JS API)
 
@@ -41,48 +49,49 @@ If you'd rather init manually:
 <script defer src=".../widget.js"></script>
 <script>
   window.addEventListener('DOMContentLoaded', () => {
-    window.SynapCores.init({
+    const w = window.SynapCores.init({
       backend: 'wss://your-backend/ws',
       agentName: 'Support',
       greeting: 'Hi! How can I help?',
+      primaryColor: '#7c3aed',
+      position: 'bottom-right',
+      theme: 'auto',
+      showBranding: true,
     });
+    // returned `w` exposes: open(), close(), toggle(), send(text), destroy()
   });
 </script>
 ```
 
-The auto-init via `data-*` attributes is the recommended path. Use the JS API
-when you need to choose between hosts at runtime, or to call `widget.open()` /
-`widget.close()` from the host page.
-
 ---
 
-## Sprint 0 — decisions locked
+## What's in Sprint 1 (MVP)
 
-1. **Bundler: esbuild.** Fastest dev iteration, zero-config IIFE output for the
-   `<script>` tag, single-file output (CSS inlined via the `define` macro), no
-   plugin ecosystem to learn.
-2. **Visitor ID: Web Crypto `crypto.randomUUID()` in `localStorage`, cookie
-   fallback.** Better Safari ITP behaviour than 3rd-party cookies; GDPR-friendly
-   (no automatic consent flow needed for non-tracking storage). Falls back to a
-   `synapcores_visitor` cookie when localStorage is blocked, and to an
-   in-memory id when both are.
-3. **Wire protocol: identical to v1 (`{type:"turn",user_id,text}` →
-   `{type:"thinking"|"brain"|"reply"}`).** Means Sprint 0 connects to the
-   existing backend without any backend changes — proves the path. Multi-tenant
-   project keying is layered on top in Sprint 2 via a new WS route.
+- **Theming**: primary color via `--sc-primary` CSS custom property, four
+  position variants, light / dark / `prefers-color-scheme: auto` with live
+  media-query updates.
+- **Mobile**: collapses to a full-screen overlay below 480px width.
+- **Animated typing indicator**: 3-dot pulse with `prefers-reduced-motion`
+  respect.
+- **Markdown rendering** in agent replies — bold, italic, inline code, fenced
+  code blocks, `[text](url)` links, paragraph breaks. User input stays plain
+  text. URL allowlist: `http://` and `https://` only.
+- **Exponential-backoff reconnect**: 1s → 2s → 4s → 8s → 16s, cap 30s. A
+  "Reconnecting…" status banner makes the state visible.
+- **ARIA + keyboard**: `role="dialog"`, `aria-modal`, `aria-labelledby`, focus
+  trap inside the panel, ESC closes and returns focus to the launcher.
+- **Scoped CSS**: every rule is namespaced under `.sc-widget-root` so host
+  styles can't bleed in and widget styles can't bleed out.
 
-## Sprint 0 — what's NOT in this spike
+## What's NOT in Sprint 1 (later sprints)
 
-The polish work is all Sprint 1+:
-
-- Markdown / code-block rendering in agent bubbles
-- Source-link chips for KB grounding
-- ARIA focus trap / ESC-to-close / keyboard nav
-- Mobile full-screen overlay
-- Reconnect-with-backoff after `ws.close`
-- Per-project rate-limit handling
-- Identity (`SynapCores.identify({…})`) — Sprint 3
-- Persistent conversation across page loads — Sprint 3
+- ❌ Multi-tenant project keying — **Sprint 2**
+- ❌ `SynapCores.identify({ name, email })` — **Sprint 3**
+- ❌ Persistent conversation across page loads — **Sprint 3**
+- ❌ Source-link chips for KB grounding — **Sprint 3** (depends on backend's
+  `brain` payload shape)
+- ❌ Per-project rate-limit UI handling — **Sprint 2**
+- ❌ CDN / npm publish — **Sprint 4**
 
 ---
 
@@ -90,28 +99,58 @@ The polish work is all Sprint 1+:
 
 ```bash
 npm install
-npm run build       # → dist/widget.js (one file, CSS inlined)
+npm run build       # → dist/widget.js (one file, CSS inlined, 19 KB minified)
 npm run dev         # esbuild watch + dev/ static server on :5050
 ```
 
 `dist/widget.js` is the entire shipped artifact. No CSS file to host
 separately, no peer deps on the embedding page.
 
-## Verify Sprint 0 end-to-end
+## Verify
+
+### Wire shape (automated)
 
 ```bash
-# Terminal 1 — v1 backend (default port 8810)
-cd /path/to/synapcores-agent
-python -m synapcores_agent.web
-
-# Terminal 2 — widget dev server
-cd widget
-npm install
-npm run dev
+.venv/bin/python widget/dev/mock_backend.py &   # speaks v1 protocol verbatim
+.venv/bin/python widget/dev/smoke_client.py     # round-trip turn→thinking→brain→reply
 ```
 
-Open <http://localhost:5050/>, click the floating chat button. Send a message
-and watch the WS frames in DevTools. A round-trip closes the spike.
+### UI (manual, in a real browser)
+
+```bash
+.venv/bin/python widget/dev/mock_backend.py &
+cd widget && npm run dev
+```
+
+Open <http://localhost:5050/>. Click the launcher. Try:
+
+- Send a plain message → see the dot-pulse → see the mock reply
+- Send `**bold** *italic* \`code\`` and confirm only agent replies render
+  markdown (your input stays plain text)
+- Kill the mock backend and watch the "Reconnecting…" banner
+- Restart it and watch the connection recover
+- Press `ESC` while the panel is open → it closes, focus returns to the launcher
+- Tab around inside the panel → focus stays trapped inside
+- Toggle your OS dark mode → palette flips live (theme=auto)
+- Resize the window below 480px → panel goes full-screen
+- Add `?reduced=1` (or set Reduce Motion in OS settings) → dot pulse stops
+
+---
+
+## Source layout
+
+```
+widget/src/
+  index.ts      public API + auto-init from <script data-*>
+  widget.ts     UI composition: launcher, panel, composer, ARIA wiring
+  config.ts     types, defaults, data-* parsing
+  visitor.ts    crypto.randomUUID() → localStorage → cookie → in-memory
+  ws.ts         WebSocket client with exponential-backoff reconnect
+  theme.ts      primary color + position + dark/light auto
+  dom.ts        el() factory + focus-trap helper
+  markdown.ts   tiny safe markdown renderer (bold/italic/code/links)
+  styles.css    scoped styles, inlined into the bundle at build time
+```
 
 ## License
 

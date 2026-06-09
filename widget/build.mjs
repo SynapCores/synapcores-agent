@@ -28,7 +28,7 @@ const opts = {
     js: '/* @synapcores/widget — MIT — https://synapcores.com */',
   },
   define: {
-    __SC_WIDGET_VERSION__: JSON.stringify('0.1.0-sprint0'),
+    __SC_WIDGET_VERSION__: JSON.stringify('0.1.0-mvp'),
     __SC_WIDGET_CSS__: cssLiteral,
   },
   logLevel: 'info',
