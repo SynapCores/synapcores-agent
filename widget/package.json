@@ -1,7 +1,7 @@
 {
   "name": "@synapcores/widget",
-  "version": "0.1.0-mvp",
-  "description": "Drop-in chat widget powered by SynapCores. Sprint 1 MVP.",
+  "version": "0.2.0-gateway",
+  "description": "Drop-in chat widget powered by SynapCores. Sprint 2 — direct-to-gateway (AiChatWsMessage).",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -10,7 +10,7 @@
   "scripts": {
     "build": "node build.mjs",
     "build:watch": "node build.mjs --watch",
-    "dev": "node build.mjs --watch & python3 -m http.server 5050 --directory dev"
+    "dev": "node build.mjs --watch & python3 -m http.server 5050"
   },
   "devDependencies": {
     "esbuild": "^0.21.0",

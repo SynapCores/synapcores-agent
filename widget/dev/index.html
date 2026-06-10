@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@synapcores/widget — Sprint 1 MVP dev page</title>
+    <title>@synapcores/widget — Sprint 2 dev page (gateway direct)</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        max-width: 760px;
+        max-width: 780px;
         margin: 60px auto;
         padding: 20px;
         color: #111;
@@ -20,70 +20,82 @@
         display: inline-block;
         padding: 2px 8px;
         border-radius: 999px;
-        background: #7c3aed;
+        background: #16a34a;
         color: white;
         font-size: 0.75em;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
       }
+      .warn {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        padding: 10px 14px;
+        margin: 12px 0;
+        font-size: 0.95em;
+      }
       ul { padding-left: 22px; }
       li { margin: 4px 0; }
     </style>
   </head>
   <body>
-    <p><span class="pill">Sprint 1 MVP</span></p>
-    <h1>@synapcores/widget — MVP</h1>
+    <p><span class="pill">Sprint 2 — gateway direct</span></p>
+    <h1>@synapcores/widget — talking to the SynapCores gateway</h1>
     <p>
-      The widget is in the bottom-right. This page demonstrates a fully
-      configured Sprint 1 install. Compared to the Sprint 0 spike you should
-      see: a purple primary color, animated typing dots, dark mode that
-      follows your system preference, markdown rendering in agent replies,
-      ESC-to-close, focus trap, a "Reconnecting…" banner if the backend
-      drops, and a full-screen overlay if you shrink to phone width.
+      <strong>No mock backend.</strong> This page connects directly to a real
+      SynapCores instance at <code>http://localhost:8080</code> using the
+      gateway's existing <code>/ws</code> endpoint and the
+      <code>AiChatWsMessage</code> protocol. The agent loop is
+      <code>AGENT_RUN()</code> in-DB — recall memory + RAG + tool routing +
+      grounded generation, all native, no Python middleware.
     </p>
 
-    <h3>What's new vs Sprint 0</h3>
+    <div class="warn">
+      <strong>Set up first:</strong> see
+      <code><a href="RUN_AGAINST_SYNAPCORES.md">RUN_AGAINST_SYNAPCORES.md</a></code>
+      for the one-time setup — run a SynapCores container, obtain a JWT, then
+      paste it into the <code>data-token</code> attribute in the
+      <code>&lt;script&gt;</code> tag at the bottom of this file. Production
+      embedders won't need this step once Sprint 2 Phase B ships the
+      <code>POST /v1/widget/token</code> endpoint.
+    </div>
+
+    <h3>What this widget exercises in the engine</h3>
     <ul>
-      <li>Theming: <code>data-primary-color</code>, <code>data-position</code>, <code>data-theme</code></li>
-      <li>Auto dark/light via <code>prefers-color-scheme</code> + reactive media query</li>
-      <li>Mobile: full-screen overlay below 480px (resize your window to see it)</li>
-      <li>Animated 3-dot "thinking" indicator</li>
-      <li>Markdown rendering (bold / italic / inline code / fenced code blocks / links)</li>
-      <li>Exponential-backoff WS reconnect (1s, 2s, 4s, 8s, 16s, cap 30s)</li>
-      <li>"Reconnecting…" status banner</li>
-      <li>ARIA <code>role="dialog"</code>, focus trap, ESC closes</li>
-      <li><code>prefers-reduced-motion</code> respected (no dot pulse, no panel slide)</li>
+      <li><code>send_message</code> → gateway → <code>chat_engine</code> →
+        <code>AGENT_RUN</code> in-DB</li>
+      <li>Streaming <code>message_chunk</code> frames → live token render</li>
+      <li><code>message_complete</code> → final markdown render</li>
+      <li>JWT auth on <code>/ws?token=…</code></li>
+      <li>Per-session memory keyed by <code>session_id</code>
+        (UUID generated on widget mount)</li>
     </ul>
 
-    <h3>Verify against the mock backend</h3>
-    <pre><code># terminal 1
-.venv/bin/python widget/dev/mock_backend.py
+    <h3>Run the dev server</h3>
+    <pre><code>cd widget
+npm install
+npm run build    # writes dist/widget.js
+npm run dev      # esbuild watch + http.server serving widget/ at :5050</code></pre>
 
-# terminal 2
-cd widget &amp;&amp; npm run dev</code></pre>
-
-    <p>
-      Then visit <a href="http://localhost:5050/">http://localhost:5050/</a>.
-      Click the chat button, send a message, watch the dots pulse, and see the
-      <code>(mock) You said: …</code> reply. Try <code>**bold**</code>, <code>*italic*</code>,
-      and a fenced ```code block``` in the input to confirm the input is treated
-      as plain text (only agent replies parse markdown).
-    </p>
+    <p>Open <a href="http://localhost:5050/dev/">http://localhost:5050/dev/</a>.</p>
 
     <hr />
 
     <p style="color: #6b7280; font-size: 0.9em">
-      The script tag below is the entire install. Try editing
-      <code>data-primary-color</code> or <code>data-position</code> and reloading.
+      The <code>&lt;script&gt;</code> below is the entire install for production
+      embedders, plus a <code>data-token</code> for dev use (replace
+      <code>REPLACE_WITH_JWT</code> with the JWT printed by the curl command in
+      <code>RUN_AGAINST_SYNAPCORES.md</code>).
     </p>
 
     <script
       defer
-      src="../dist/widget.js"
-      data-backend="ws://localhost:8810/ws"
+      src="/dist/widget.js"
+      data-api-base="http://localhost:8080"
+      data-database="default"
+      data-token="REPLACE_WITH_JWT"
       data-agent-name="SynapCores"
-      data-greeting="Hi! I'm a **demo agent** running against the mock backend. Send anything and I'll echo it back. Try a *fenced* `code block` to see markdown rendering."
+      data-greeting="Hi! I'm running on the real SynapCores engine via `AGENT_RUN()`. Ask me anything about your schema, data, or — if memory is wired — things you told me last session."
       data-primary-color="#7c3aed"
       data-position="bottom-right"
       data-theme="auto"

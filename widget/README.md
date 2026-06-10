@@ -1,97 +1,144 @@
 # @synapcores/widget
 
 Drop-in chat widget powered by SynapCores. Embed it on any site with one
-`<script>` tag; the SynapCores engine is the brain.
+`<script>` tag; the SynapCores engine **is** the agent — recall memory + RAG
++ tool routing + grounded generation run in-DB via `AGENT_RUN()`.
 
-> **Status — Sprint 1 MVP** (v0.1.0-mvp). The Sprint 0 spike's wire is now
-> wrapped in a polished UI: theming, dark/light auto, mobile full-screen,
-> animated typing dots, markdown rendering, ARIA focus trap + ESC, and
-> exponential-backoff reconnect. Sprint 2 adds multi-tenant project keying;
-> Sprint 3 adds identity + persistent conversation; Sprint 4 ships CDN + npm.
+> **Status — Sprint 2 Phase A (v0.2.0-gateway)**. The widget now talks
+> **directly to the SynapCores gateway** at `/ws` over the `AiChatWsMessage`
+> protocol. No Python middleware, no second process. Phase B (auto-bootstrap
+> via `POST /v1/widget/token` on the gateway) is the next ticket; until it
+> ships, dev/preview use the `data-token` attribute with a manually-issued
+> JWT. Production embedders should always use the bootstrap.
 
 ---
 
-## Install
+## Architecture
+
+```
+Browser                  SynapCores gateway              In-DB
+─────────                ──────────────────              ─────
+<script widget.js>
+   │ POST /v1/widget/token   ─►  validate project_key,
+   │ (project_key, visitor)      check Origin allowlist,
+   │                             issue ~5 min JWT
+   │ ◄─ {token}
+   │
+   │ WS  /ws?token=<jwt>     ─►  websocket_handler.rs
+   │ {type:"send_message"        AiChatWsMessage
+   │  session_id, message}        │
+   │                              ▼
+   │                       handle_ai_chat_message
+   │                              │
+   │                              ▼
+   │                       chat_engine + AGENT_RUN
+   │                              │
+   │ ◄─ {type:"message_chunk"}    │ (streaming tokens)
+   │ ◄─ {type:"message_complete"} ▼
+```
+
+One docker container. No Python sidecar. No protocol drift between two
+copies of an "agent loop." Multi-tenancy uses the existing gateway
+tenant/JWT/CORS plumbing.
+
+---
+
+## Install (production, post Phase B)
 
 ```html
 <script
   defer
   src="https://cdn.synapcores.com/widget.js"
-  data-backend="wss://your-agent-backend.com/ws"
+  data-api-base="https://your-synapcores.example.com"
+  data-database="default"
+  data-project-key="pk_abc123"
 ></script>
 ```
 
-That's the whole install. The widget renders a floating launcher button (you
-choose the corner), opens a chat panel on click, and connects to the backend
-you point it at. **Bring-your-own backend** — see `synapcores-agent` for the
-Python runtime that serves the WebSocket.
+The widget POSTs the project key + a generated visitor id at first open,
+gets back a ~5-minute scoped JWT, opens WS. The Origin header is validated
+server-side against the project's `allowed_origins` allowlist (the gateway
+config defines that), so the embed code is safe to publish on a public page
+even though it identifies the project.
+
+## Install (dev — Phase B not yet shipped)
+
+```html
+<script
+  defer
+  src="/dist/widget.js"
+  data-api-base="http://localhost:8080"
+  data-database="default"
+  data-token="<paste a JWT here>"
+></script>
+```
+
+See `dev/RUN_AGAINST_SYNAPCORES.md` for the full curl flow to obtain a
+JWT (docker run → `/v1/auth/login` → paste).
 
 ---
 
-## Config (via `data-*` attributes)
+## Config
 
 | Attribute              | Default          | Notes                                                    |
 | ---------------------- | ---------------- | -------------------------------------------------------- |
-| `data-backend`         | _(required)_     | WS URL of the synapcores-agent backend                   |
-| `data-project`         | _(none)_         | Project id; passed through but ignored until Sprint 2    |
+| `data-api-base`        | _(required)_     | SynapCores gateway base URL (e.g. `https://api.your.com`)|
+| `data-database`        | _(required)_     | Which database in the SynapCores tenant to chat against  |
+| `data-project-key`     | _(required\*)_   | Project public key for bootstrap (* OR `data-token`)     |
+| `data-token`           | _(none)_         | Manual JWT — dev/preview only, never in production       |
 | `data-agent-name`      | `Support`        | Header label                                             |
 | `data-greeting`        | sensible default | First message shown when the panel opens                 |
-| `data-primary-color`   | `#00bfff`        | Any CSS color string — applied as a CSS custom property  |
+| `data-primary-color`   | `#00bfff`        | Any CSS color string                                     |
 | `data-position`        | `bottom-right`   | `bottom-right` / `bottom-left` / `top-right` / `top-left`|
-| `data-theme`           | `auto`           | `light` / `dark` / `auto` (follows prefers-color-scheme) |
+| `data-theme`           | `auto`           | `light` / `dark` / `auto`                                |
 | `data-show-branding`   | `true`           | Set `false` to hide the "Powered by SynapCores" footer   |
+| `data-model`           | server default   | Optional override for `send_message.model`               |
 
-## Config (via JS API)
-
-If you'd rather init manually:
+Or via JS API:
 
 ```html
 <script defer src=".../widget.js"></script>
 <script>
   window.addEventListener('DOMContentLoaded', () => {
     const w = window.SynapCores.init({
-      backend: 'wss://your-backend/ws',
+      apiBase: 'https://api.your.com',
+      database: 'default',
+      projectKey: 'pk_abc123',
       agentName: 'Support',
-      greeting: 'Hi! How can I help?',
       primaryColor: '#7c3aed',
-      position: 'bottom-right',
-      theme: 'auto',
-      showBranding: true,
     });
-    // returned `w` exposes: open(), close(), toggle(), send(text), destroy()
+    // w.open(), w.close(), w.toggle(), w.send(text), w.destroy()
   });
 </script>
 ```
 
 ---
 
-## What's in Sprint 1 (MVP)
+## What's in Sprint 2 Phase A
 
-- **Theming**: primary color via `--sc-primary` CSS custom property, four
-  position variants, light / dark / `prefers-color-scheme: auto` with live
-  media-query updates.
-- **Mobile**: collapses to a full-screen overlay below 480px width.
-- **Animated typing indicator**: 3-dot pulse with `prefers-reduced-motion`
-  respect.
-- **Markdown rendering** in agent replies — bold, italic, inline code, fenced
-  code blocks, `[text](url)` links, paragraph breaks. User input stays plain
-  text. URL allowlist: `http://` and `https://` only.
-- **Exponential-backoff reconnect**: 1s → 2s → 4s → 8s → 16s, cap 30s. A
-  "Reconnecting…" status banner makes the state visible.
-- **ARIA + keyboard**: `role="dialog"`, `aria-modal`, `aria-labelledby`, focus
-  trap inside the panel, ESC closes and returns focus to the launcher.
-- **Scoped CSS**: every rule is namespaced under `.sc-widget-root` so host
-  styles can't bleed in and widget styles can't bleed out.
+- **Direct-to-gateway wire** — `send_message` / `message_chunk` /
+  `message_complete` / `tool_result` / `error` / `pong`. Matches
+  `crates/aidb-gateway/src/websocket/ai_chat_handler.rs::AiChatWsMessage`
+  exactly.
+- **Streaming render** — chunks accumulate into an in-progress agent
+  bubble; on `message_complete` it re-renders with full markdown.
+- **Bootstrap step** — `POST /v1/widget/token` with `{project_key,
+  visitor_id}`. Used when `data-token` is not set.
+- **Manual-token bypass** — `data-token` for development before
+  Phase B ships.
+- **Session id** — one UUID per widget mount; keys per-conversation memory.
+- All Sprint 1 polish kept: theming, dark mode, mobile overlay, animated
+  dots, exponential-backoff reconnect, ARIA dialog + focus trap + ESC,
+  scoped CSS, safe markdown.
 
-## What's NOT in Sprint 1 (later sprints)
+## What's still pending
 
-- ❌ Multi-tenant project keying — **Sprint 2**
-- ❌ `SynapCores.identify({ name, email })` — **Sprint 3**
-- ❌ Persistent conversation across page loads — **Sprint 3**
-- ❌ Source-link chips for KB grounding — **Sprint 3** (depends on backend's
-  `brain` payload shape)
-- ❌ Per-project rate-limit UI handling — **Sprint 2**
-- ❌ CDN / npm publish — **Sprint 4**
+- **Phase B — gateway endpoint** (next ticket): `POST /v1/widget/token`
+  Rust handler, `[[widget.projects]]` config section, CORS allowlist on
+  `/ws` per project, short-lived JWT issuance.
+- `identify({name, email})` — Sprint 3.
+- Persistent conversation across page loads — Sprint 3.
+- CDN + npm publish — Sprint 4.
 
 ---
 
@@ -99,41 +146,15 @@ If you'd rather init manually:
 
 ```bash
 npm install
-npm run build       # → dist/widget.js (one file, CSS inlined, 19 KB minified)
-npm run dev         # esbuild watch + dev/ static server on :5050
+npm run build       # → dist/widget.js (21.6 KB minified, CSS inlined)
+npm run dev         # esbuild watch + http.server widget/ on :5050
+                    # then open http://localhost:5050/dev/
 ```
-
-`dist/widget.js` is the entire shipped artifact. No CSS file to host
-separately, no peer deps on the embedding page.
 
 ## Verify
 
-### Wire shape (automated)
-
-```bash
-.venv/bin/python widget/dev/mock_backend.py &   # speaks v1 protocol verbatim
-.venv/bin/python widget/dev/smoke_client.py     # round-trip turn→thinking→brain→reply
-```
-
-### UI (manual, in a real browser)
-
-```bash
-.venv/bin/python widget/dev/mock_backend.py &
-cd widget && npm run dev
-```
-
-Open <http://localhost:5050/>. Click the launcher. Try:
-
-- Send a plain message → see the dot-pulse → see the mock reply
-- Send `**bold** *italic* \`code\`` and confirm only agent replies render
-  markdown (your input stays plain text)
-- Kill the mock backend and watch the "Reconnecting…" banner
-- Restart it and watch the connection recover
-- Press `ESC` while the panel is open → it closes, focus returns to the launcher
-- Tab around inside the panel → focus stays trapped inside
-- Toggle your OS dark mode → palette flips live (theme=auto)
-- Resize the window below 480px → panel goes full-screen
-- Add `?reduced=1` (or set Reduce Motion in OS settings) → dot pulse stops
+See `dev/RUN_AGAINST_SYNAPCORES.md` — five steps: docker run, get JWT,
+paste into `dev/index.html`, `npm run dev`, open the page.
 
 ---
 
@@ -141,15 +162,16 @@ Open <http://localhost:5050/>. Click the launcher. Try:
 
 ```
 widget/src/
-  index.ts      public API + auto-init from <script data-*>
-  widget.ts     UI composition: launcher, panel, composer, ARIA wiring
-  config.ts     types, defaults, data-* parsing
-  visitor.ts    crypto.randomUUID() → localStorage → cookie → in-memory
-  ws.ts         WebSocket client with exponential-backoff reconnect
-  theme.ts      primary color + position + dark/light auto
-  dom.ts        el() factory + focus-trap helper
-  markdown.ts   tiny safe markdown renderer (bold/italic/code/links)
-  styles.css    scoped styles, inlined into the bundle at build time
+  index.ts        public API + auto-init from <script data-*>
+  widget.ts       UI + bootstrap + AiChatWsMessage protocol
+  config.ts       types, defaults, data-* parsing, deriveWsUrl()
+  bootstrap.ts    POST /v1/widget/token (the auto path)
+  visitor.ts     crypto.randomUUID() → localStorage → cookie → in-memory
+  ws.ts           WebSocket with 1/2/4/8/16s backoff reconnect
+  theme.ts        primary color + position + dark/light auto
+  dom.ts          el() factory + focus-trap helper
+  markdown.ts     safe MD renderer (bold/italic/code/links, http(s) only)
+  styles.css      scoped under .sc-widget-root, inlined into the bundle
 ```
 
 ## License
