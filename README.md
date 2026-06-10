@@ -1,71 +1,79 @@
 # synapcores-agent
 
-> **A real customer-support agent where the *database* is the memory.** Watch the chat on the left; watch the engine remember, retrieve, and route on the right.
+**Embed a real, memory-grounded AI support agent on any site with one
+`<script>` tag.** The widget is MIT-licensed and CDN-hosted; the agent
+loop runs natively in [SynapCores](https://synapcores.com) via
+`AGENT_RUN()`; your browser never holds a database credential.
 
 ![SynapCores chat widget with a live Brain debug sidebar — gpt-4o demo](docs/demo/support-chat.gif)
 
-A **real, framework-free AI agent** whose brain is **[SynapCores](https://synapcores.com)**.
+```html
+<script defer
+  src="https://cdn.jsdelivr.net/npm/@synapcores/widget@0.4.0/dist/widget.js"
+  integrity="sha384-rn44GdC0gnzNPwhJYHl4TEzahTnCGWtcE/N7QJZ1T5L+Sta8Bh/2d4lga2FaM4NB"
+  crossorigin="anonymous"
+  data-api-base="https://chat.your.com"
+  data-project-key="pk_abc123"></script>
+```
 
-Most "AI agent" stacks bolt together a vector DB, a graph DB, a cache, an LLM,
-and a framework (LangChain, etc.) with a lot of glue. This agent does none of
-that. It is a thin, dependency-free Python loop where **SynapCores is the entire
-brain** — memory, retrieval (RAG), semantic tool routing, state, and text
-generation — reached over plain HTTP.
-
-> The point is to be **agent-agnostic by being framework-free**. There is no
-> LangChain dependency. The agent is a few hundred lines of standard-library
-> Python you can read top to bottom and fork in an afternoon. The same brain is
-> reachable from *any* framework — or from Claude Code — over **MCP**.
+That's the entire install on the embedder's side. The two `data-*`
+attributes point at **your** `@synapcores/widget-proxy` (this repo's
+`proxy/`), which holds the SynapCores credential and pipes
+`AiChatWsMessage` frames between the browser and a SynapCores instance
+you own.
 
 ---
 
-## The agent loop
+## What's in this repo
 
 ```
-  input
-    → recall memory (vector)     what has this user told us before?
-    → retrieve knowledge (RAG)   ground the answer in the knowledge base
-    → semantic tool-route        pick the right tool by meaning, not keywords
-    → act                        run the chosen tool to gather context
-    → GENERATE reply             grounded generation with the bundled LLM
-    → write memory back          persist the turn for next time
+synapcores-agent/
+├── widget/    @synapcores/widget   — TypeScript bundle (21 KB), on npm
+├── proxy/     @synapcores/widget-proxy — Node.js delivery + WS proxy
+├── examples/  Bare HTML, Next.js, WordPress reference embeds
+└── src/       Original v1 Python agent demo (still works, see below)
 ```
 
-Every arrow is a **real SynapCores call** — `EMBED`, `COSINE_SIMILARITY`,
-`GENERATE`, and (for the graph-memory variant) Cypher `MERGE` / `MATCH`. No
-local embedding model, no separate vector index, no glue service.
-
-Each step is also a **certified recipe** — "this is how the brain works":
-
-| Loop step | What it does | Recipe |
+| Piece | Role | Who runs it |
 |---|---|---|
-| recall memory | `EMBED` the query, rank past turns by `COSINE_SIMILARITY` | [give-any-agent-long-term-memory](https://synapcores.com/recipes/agents/give-any-agent-long-term-memory) |
-| retrieve knowledge | semantic search over a knowledge base | [rag-ground-any-agent](https://synapcores.com/recipes/agents/rag-ground-any-agent) |
-| semantic tool-route | embed tool descriptions + query, pick the closest | [semantic-tool-routing](https://synapcores.com/recipes/agents/semantic-tool-routing) |
-| episodic recall | recall how similar past tickets were resolved | [agentic-memory-graph](https://synapcores.com/recipes/agents/agentic-memory-graph) |
-| act + GENERATE + persist | the full support-agent composition | [build-a-customer-support-agent](https://synapcores.com/recipes/agents/build-a-customer-support-agent) |
+| `widget/` | The chat UI — floating launcher, panel, streaming render, ARIA, dark mode, mobile overlay | CDN (jsDelivr + unpkg + the proxy itself) |
+| `proxy/` | Holds the SynapCores credential, issues HttpOnly cookies, proxies WS, injects `context.database` + identity | You (one Node 20 process per site) |
+| SynapCores | The actual database + AGENT_RUN agent loop (recall memory → RAG → tool route → grounded generation) | You (one Docker container) |
 
-The agents recipe cluster lives at **<https://synapcores.com/recipes/agents/>**.
-
----
-
-## The persona: a customer-support agent
-
-A working support agent with three real tools, each backed by a verified
-SynapCores surface:
-
-1. **`search_knowledge_base`** — semantic search over help articles (RAG).
-2. **`find_similar_tickets`** — recall how similar past incidents were resolved.
-3. **`draft_reply`** — grounded generation when nothing else is a strong match.
-
-Conversation memory **persists across runs** — ask a follow-up tomorrow and the
-agent recalls today's conversation by meaning.
+The browser holds **only an HttpOnly signed session cookie**. No JWT, no
+API key, no database token ever reaches JavaScript.
 
 ---
 
-## Quick start
+## Architecture
 
-### 1. Run SynapCores locally
+```
+Browser                 widget-proxy (Node.js)        SynapCores gateway
+─────────               ──────────────────────         ──────────────────
+<script /widget.js>
+  │  POST /v1/session  ─►  validate origin,
+  │  {project_key}         set HttpOnly cookie,
+  │                        return persona/agent_name
+  │ ◄─
+  │
+  │  WS /ws (cookie)   ─►  verify cookie,
+  │                        open upstream WS with
+  │                        server-held JWT,
+  │                        pipe AiChatWsMessage    ─►  AGENT_RUN in-DB
+  │ ◄─ message_chunk          ◄─                       ◄─
+  │ ◄─ message_complete       ◄─                       ◄─
+```
+
+The proxy is a credentialed pipe + a tiny session ledger. The
+`AGENT_RUN()` SQL function inside SynapCores does the full agent loop
+(recall memory + RAG + tool routing + grounded generation) — see
+<https://synapcores.com/recipes/agents/>.
+
+---
+
+## Full install — one site, three components
+
+### 1. Run SynapCores
 
 ```bash
 docker run -d --name synapcores -p 8080:8080 \
@@ -78,250 +86,197 @@ docker run -d --name synapcores -p 8080:8080 \
 docker logs synapcores | grep -A 12 FIRST-BOOT
 ```
 
-The Community image ships the **embedded LLM** (a small GGUF model) and
-**embeddings** out of the box — no external API key required. The first
-`EMBED()` call lazily downloads the MiniLM embedding model (~90 MB) into the
-container's Hugging Face cache; subsequent calls are offline.
+The Community image ships an embedded LLM (small GGUF model) + embeddings
+out of the box. First call cold-starts in ~30s; subsequent calls are
+sub-second. To use a hosted LLM instead, see the gateway docs for the
+`[ai_chat]` config block.
 
-> **Cold-start timeout:** the bundled GGUF model loads lazily, so the **first**
-> `GENERATE` call on CPU can take ~30 s. The gateway's default `request_timeout`
-> is 30 s, which the cold load can just exceed. If your first replies time out,
-> raise it in `/etc/synapcores/gateway.toml`:
->
-> ```toml
-> request_timeout = 300            # [server]
-> default_timeout_ms = 300000      # [query]
-> ```
->
-> then restart the container. After the model is warm, `GENERATE` is sub-second.
-> (To avoid local LLM entirely, point the gateway at OpenAI/Anthropic/Ollama —
-> see **Bring your own LLM** below.)
-
-### 2. Configure the agent
+### 2. Run the widget-proxy
 
 ```bash
-git clone <this repo> && cd synapcores-agent
+git clone https://github.com/SynapCores/synapcores-agent
+cd synapcores-agent/proxy
+npm install
+
+# Obtain a JWT for the proxy to hold:
+curl -s http://localhost:8080/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@local","password":"<from-docker-logs>"}' \
+  | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])'
+# → save the printed JWT
+
+# Configure
+cp projects.example.json projects.json
+# Edit projects.json: set `allowed_origins` for your sites, then run:
+
+export PROXY_SESSION_SECRET="$(openssl rand -hex 32)"
+export DEMO_SYNAPCORES_TOKEN="<paste the JWT>"
+
+npm start         # listens on 127.0.0.1:5060
+```
+
+Visit <http://127.0.0.1:5060/> — the proxy ships a built-in dev landing
+page that script-tags the widget against the first configured project,
+so you can sanity-check the whole pipeline before going live.
+
+For production, build and run with the included Dockerfile + compose:
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+docker compose up -d        # SynapCores + widget-proxy together
+```
+
+### 3. Paste the widget on your site
+
+Pick one source — both are free, both serve the identical 21 KB bundle:
+
+**A. CDN (recommended, version-pinned + SRI):**
+```html
+<script defer
+  src="https://cdn.jsdelivr.net/npm/@synapcores/widget@0.4.0/dist/widget.js"
+  integrity="sha384-rn44GdC0gnzNPwhJYHl4TEzahTnCGWtcE/N7QJZ1T5L+Sta8Bh/2d4lga2FaM4NB"
+  crossorigin="anonymous"
+  data-api-base="https://chat.your.com"
+  data-project-key="pk_abc123"></script>
+```
+
+**B. Proxy-hosted (no external CDN dependency):**
+```html
+<script defer
+  src="https://chat.your.com/widget.js"
+  data-api-base="https://chat.your.com"
+  data-project-key="pk_abc123"></script>
+```
+
+Three reference embeds in `examples/`:
+
+- `examples/embed-html/`     — bare HTML, Webflow, Carrd, static sites
+- `examples/embed-nextjs/`   — Next.js (Script tag + React component patterns)
+- `examples/embed-wordpress/` — drop-in WordPress plugin (Settings page)
+
+---
+
+## What the widget does
+
+- Floating launcher button → 380×600 slide-up chat panel (full-screen
+  overlay below 480px)
+- Light / dark / `prefers-color-scheme: auto`, primary-color theming
+- Streaming token render via `message_chunk` → markdown re-render on
+  `message_complete`
+- Exponential-backoff WebSocket reconnect (1s, 2s, 4s, 8s, 16s, cap 30s)
+- ARIA `role="dialog"` + focus trap + ESC-to-close, `prefers-reduced-motion`
+  respected
+- **Persistent conversation across page loads** — deterministic session_id
+  (HMAC of proxy secret + visitor + project) means returning visitors see
+  their prior turns, and AGENT_RUN's chat-memory layer threads context
+  across days
+- **`SynapCores.identify({id, name, email, attrs})`** — when the host site
+  knows who the visitor is (after login), it identifies them; the proxy
+  injects identity into `send_message.context.user` server-side so
+  AGENT_RUN sees an identified visitor
+
+Full surface: see [`widget/README.md`](widget/README.md).
+
+## What the proxy does
+
+- Serves the widget bundle at `GET /widget.js` (ETag + 5-min cache)
+- Issues HMAC-signed HttpOnly cookies at `POST /v1/session`
+- Authenticates WS upgrades on `GET /ws` via the cookie + a per-project
+  origin allowlist
+- Pipes `AiChatWsMessage` frames; **only** `send_message` + `ping` from
+  browser; `execute_sql` / `execute_tool` silently dropped
+- Server-side injection of `context.database`, `context.visitor_id`,
+  `context.user` (no client-side override possible)
+- Per-visitor sliding-window rate limit (default 60/min/project)
+- Persistent conversation history via `GET /v1/history` (proxies to
+  SynapCores's `/v1/chat/sessions/{id}/messages`)
+- Tiny CLI — `sc-widget projects ls | embed <key> | verify-config`
+
+Full surface: see [`proxy/README.md`](proxy/README.md).
+
+---
+
+## Distribution
+
+| Where | URL | Cost |
+|---|---|---|
+| npm | `@synapcores/widget` | Free, public |
+| jsDelivr | `https://cdn.jsdelivr.net/npm/@synapcores/widget@0.4.0/dist/widget.js` | Free, global edge |
+| unpkg | `https://unpkg.com/@synapcores/widget@0.4.0/dist/widget.js` | Free, global edge |
+| Your proxy | `https://chat.your.com/widget.js` | Whatever your proxy host costs |
+| Cloudflare Pages | `https://cdn.synapcores.com/widget.js` (optional CNAME) | Free tier — unlimited bandwidth |
+
+Publishing pipeline is wired in `.github/workflows/widget-cdn.yml`:
+- **Master push touching widget/** → Cloudflare Pages deploy
+- **`widget-v*` tag push** → `npm publish`
+
+See [`widget/PUBLISH.md`](widget/PUBLISH.md) for the operator guide.
+
+---
+
+## Also included: the v1 Python agent demo
+
+The original v1 of this repo was a **framework-free Python agent loop**
+(`src/synapcores_agent/`) that exercises the same brain (recall + RAG +
+semantic routing + grounded generation) from a CLI / WebSocket demo —
+the engine behind the `support-chat.gif` at the top.
+
+The widget is not a replacement: it's a delivery surface. The Python
+agent is still the cleanest way to see the loop step-by-step and to
+fork as a starting point for non-browser agents (CLI tools, Discord
+bots, internal pipelines).
+
+```bash
+# v1 Python agent — separate from the widget/proxy stack
+git clone https://github.com/SynapCores/synapcores-agent
+cd synapcores-agent
 cp .env.example .env
-# edit .env: set SYNAPCORES_URL, SYNAPCORES_USERNAME, SYNAPCORES_PASSWORD
-pip install -e .          # or: pip install -e ".[dev]" for tests
-```
+# edit .env: SYNAPCORES_URL + admin credentials
+pip install -e .
 
-### 3. Run it
-
-```bash
-# Seed a demo knowledge base + past tickets, then chat interactively:
 python -m synapcores_agent --seed --trace
-
-# Ask one question and exit:
-python -m synapcores_agent --ask "I can't log in, it says my password is wrong."
-
-# Watch the full loop (recall / RAG / route) per turn:
-python -m synapcores_agent --trace
-
-# Reset the agent's tables:
-python -m synapcores_agent --reset
+python -m synapcores_agent --ask "I can't log in"
 ```
 
-Or run the scripted multi-turn demo:
+The full v1 agent loop, certified recipes, tool surface, and test suite
+are documented under <https://synapcores.com/recipes/agents/>. Source
+under `src/synapcores_agent/`.
 
-```bash
-python examples/demo_session.py
+---
+
+## Repository layout
+
+```
+synapcores-agent/
+├── .github/workflows/widget-cdn.yml   Cloudflare Pages + npm publish
+├── widget/
+│   ├── src/         TypeScript widget bundle source
+│   ├── dist/        Built artifact (committed for the proxy to serve)
+│   ├── PUBLISH.md   How publishing works (Cloudflare + npm)
+│   └── README.md    Widget config + dev surface
+├── proxy/
+│   ├── src/         Node.js HTTP + WS proxy
+│   ├── bin/         sc-widget CLI
+│   ├── Dockerfile, docker-compose.example.yml
+│   └── README.md    Proxy config + security checklist + deploy
+├── examples/
+│   ├── embed-html/, embed-nextjs/, embed-wordpress/
+│   └── README.md    Embed patterns
+└── src/synapcores_agent/   v1 Python agent (original demo)
 ```
 
 ---
 
-## What an actual session looks like
+## Status
 
-```
-you> I can't log in, it keeps saying my password is wrong.
-   recall=0 kb=2 route=[find_similar_tickets=0.53, search_knowledge_base=0.05] -> find_similar_tickets
-agent> I understand you're experiencing difficulty with your login... Please
-       check your password reset link in your inbox and try again...
-
-you> Also, how do I get a refund on my annual plan?
-   recall=0 kb=2 route=[search_knowledge_base=0.30, find_similar_tickets=0.05] -> search_knowledge_base
-agent> Since your annual plan is prorated, you should contact support to
-       discuss your options...
-
-you> Remind me what we were troubleshooting earlier with my account?
-   recall=4 kb=3 route=[find_similar_tickets=0.56] -> find_similar_tickets
-agent> We were investigating an issue with your login password...
-```
-
-Note the last turn: `recall=4` — the agent pulled the earlier login
-conversation out of long-term memory **by meaning** and grounded its answer on
-it. That memory survives process restarts because it lives in SynapCores.
-
----
-
-## How the brain works (the verified surfaces)
-
-Everything routes through **one SQL/Cypher endpoint** — `POST /v1/query/execute` —
-plus `POST /v1/auth/login` to mint a JWT.
-
-**Memory recall** ([`brain.py`](src/synapcores_agent/brain.py)):
-
-```sql
-SELECT role, content,
-       COSINE_SIMILARITY(embedding, EMBED('what was my order number')) AS score
-FROM support_agent_memory
-WHERE user_id = 'demo-user'
-ORDER BY score DESC LIMIT 4;
-```
-
-**RAG retrieval:**
-
-```sql
-SELECT title, body,
-       COSINE_SIMILARITY(embedding, EMBED('I forgot my password')) AS score
-FROM support_agent_kb
-ORDER BY score DESC LIMIT 3;
-```
-
-**Semantic tool routing** ([`router.py`](src/synapcores_agent/router.py)) — one
-`COSINE_SIMILARITY` per tool description in a single row, ranked in Python:
-
-```sql
-SELECT COSINE_SIMILARITY(EMBED('<tool 1 description>'), EMBED('<user msg>')) AS s0,
-       COSINE_SIMILARITY(EMBED('<tool 2 description>'), EMBED('<user msg>')) AS s1,
-       ...;
-```
-
-**Grounded generation** — the bundled LLM, sourced from a scan (not a bare
-literal):
-
-```sql
-SELECT GENERATE(p) AS reply FROM (SELECT '<grounded prompt>' AS p) r;
-```
-
-### Two surface notes worth knowing
-
-- **String literals use single quotes.** A double-quoted token in SynapCores SQL
-  is an *identifier* (column name), not a string. All user text is escaped via
-  `sql_quote()` and single-quoted. This is the #1 footgun when hand-building
-  queries.
-- **Source AI-function inputs from a `FROM (SELECT … AS col) r` scan.** A bare
-  literal works for `GENERATE`, but the same pattern is *required* for
-  `AUTOML.PREDICT` (a bare literal there trips a `duplicate 'value'` planner
-  error). The client uses the scan form uniformly so the pattern is consistent.
-
----
-
-## Plug into any framework — or Claude Code — via MCP
-
-The agent loop above uses the REST client for clarity, but SynapCores also
-speaks the **Model Context Protocol (MCP)**, so *any* MCP client can use the same
-brain with no Python at all.
-
-The gateway exposes MCP as JSON-RPC 2.0:
-
-```
-POST /v1/mcp          — single JSON-RPC request
-POST /v1/mcp/batch    — batch
-GET  /v1/mcp/info     — server info
-```
-
-with these tools (the original SQL-mediated six, plus AI primitives added in
-later releases):
-
-`query`, `execute`, `list_tables`, `describe_table`, `validate_query`,
-`sql_manual` — and `train_model` / `predict` / `list_models` / `describe_model`,
-`semantic_search`, `embed_text`, `graph_query`, `generate_text`.
-
-### Claude Code / Claude Desktop
-
-Claude clients speak MCP over stdio, so the engine ships a tiny stdio→HTTP
-bridge (`scripts/integrations/synapcores-mcp-bridge.js`). One command:
-
-```bash
-claude mcp add synapcores \
-  --transport stdio \
-  --env SYNAPCORES_URL=http://127.0.0.1:8080 \
-  --env SYNAPCORES_USERNAME=admin \
-  --env SYNAPCORES_PASSWORD='your-admin-password' \
-  -- node ~/.synapcores/synapcores-mcp-bridge.js
-```
-
-Now Claude Code can `query`/`execute`/`semantic_search`/`graph_query` directly —
-SynapCores becomes Claude's memory + RAG + graph brain. A future engine release
-adds native SSE / streamable-HTTP transports so clients connect to the gateway
-URL directly (`ws://<host>/mcp?token=<jwt>` style) without the bridge.
-
-### From your own code
-
-This repo includes a tiny MCP client ([`mcp.py`](src/synapcores_agent/mcp.py)):
-
-```python
-from synapcores_agent.mcp import MCPClient
-
-mcp = MCPClient("http://127.0.0.1:8080", token=jwt)
-mcp.initialize()
-print(mcp.list_tools())
-print(mcp.query("SELECT 1 + 1 AS x"))
-```
-
-### From LangChain / other frameworks
-
-The brain methods are framework-neutral. Wrap `Brain.search_kb`,
-`Brain.find_similar_tickets`, and `Brain.recall_memory` as tools in your
-framework of choice, or expose the MCP tools to any MCP-aware agent runtime. The
-SynapCores side is identical — the framework is just a thin shell around it.
-
----
-
-## Bring your own LLM
-
-By default the agent uses the **bundled `GENERATE`** (zero external key). To use
-an external provider instead, wire it into the gateway's
-`/etc/synapcores/gateway.toml`:
-
-```toml
-[query.ai_service]
-provider = "openai"          # or "anthropic" / "ollama"
-api_key  = "${OPENAI_API_KEY}"
-model    = "gpt-4o-mini"
-```
-
-(set `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` on the container/service env, restart),
-and the agent's `GENERATE` calls transparently use it. No agent code changes.
-
----
-
-## Project layout
-
-```
-src/synapcores_agent/
-  client.py        # dependency-free REST client (login, execute, generate)
-  config.py        # .env / env loading
-  brain.py         # SynapCores as memory + RAG + episodic recall + generation
-  router.py        # semantic tool routing (EMBED + COSINE_SIMILARITY)
-  agent.py         # the framework-free agent loop
-  tools/           # the three support tools
-  mcp.py           # optional MCP (JSON-RPC) client — the agnostic path
-  seed.py          # demo KB + ticket corpus
-  __main__.py      # `python -m synapcores_agent` CLI / REPL
-examples/
-  demo_session.py  # scripted multi-turn end-to-end session
-tests/
-  test_unit.py     # pure-Python tests (no gateway needed)
-  test_live.py     # end-to-end against a real gateway (auto-skips if absent)
-```
-
----
-
-## Tests
-
-```bash
-pip install -e ".[dev]"
-pytest tests/test_unit.py -q                       # always runs
-SYNAPCORES_URL=http://127.0.0.1:8080 \
-SYNAPCORES_USERNAME=admin SYNAPCORES_PASSWORD=... \
-  pytest tests/test_live.py -v                      # needs a live gateway
-```
-
-The live suite verifies the real surfaces: `EMBED` + `COSINE_SIMILARITY`
-semantic ranking, KB retrieval, similar-ticket recall, memory persistence,
-semantic routing, and a full grounded turn.
+| Component | Status |
+|---|---|
+| `@synapcores/widget@0.4.0` | ✅ Live on npm, jsDelivr, unpkg |
+| `@synapcores/widget-proxy` (this repo's `proxy/`) | ✅ Sprint 2-4 complete |
+| identify() + persistent conversation | ✅ Sprint 3 |
+| Dockerfile + docker-compose | ✅ Sprint 4 |
+| Cloudflare Pages auto-deploy | ⚠️ Workflow present, awaiting secrets |
+| v1 Python agent demo | ✅ Unchanged from May |
 
 ---
 
@@ -329,5 +284,5 @@ semantic routing, and a full grounded turn.
 
 MIT — see [LICENSE](LICENSE).
 
-Built on [SynapCores](https://synapcores.com). The agent patterns are the
-certified recipes at <https://synapcores.com/recipes/agents/>.
+Built on [SynapCores](https://synapcores.com). The agentic patterns are
+the certified recipes at <https://synapcores.com/recipes/agents/>.
