@@ -1,0 +1,54 @@
+# Single-host deployment: SynapCores + widget-proxy.
+#
+# Copy to `docker-compose.yml`, edit ports / volumes / env, then:
+#
+#   export PROXY_SESSION_SECRET="$(openssl rand -hex 32)"
+#   docker compose up -d
+#
+# Once SynapCores prints first-boot admin creds in its logs, obtain a
+# JWT (`curl /v1/auth/login`) and set DEMO_SYNAPCORES_TOKEN in your
+# environment (or in a .env next to this file). Restart the proxy:
+#   docker compose restart widget-proxy
+#
+# Production checklist (NOT enabled by default in this template):
+#   - put HTTPS in front (Caddy, nginx, Cloudflare) — the SameSite=None
+#     cookie that cross-origin embeds need requires Secure
+#   - flip projects.json `session.same_site_none` to true for cross-origin
+#   - run `synapcores pull <model>` once to warm the local LLM
+#   - rotate PROXY_SESSION_SECRET on a schedule (sessions invalidate on rotation)
+
+services:
+  synapcores:
+    image: ghcr.io/synapcores/community:latest
+    container_name: synapcores
+    restart: unless-stopped
+    environment:
+      AIDB_ACCEPT_LICENSE: "1"
+      # Generate once: openssl rand -base64 32
+      AIDB_JWT_SECRET: ${AIDB_JWT_SECRET:?set AIDB_JWT_SECRET in your environment}
+    ports:
+      - "8080:8080"
+    volumes:
+      - synapcores-data:/var/lib/synapcores
+
+  widget-proxy:
+    build: .
+    container_name: widget-proxy
+    restart: unless-stopped
+    depends_on:
+      - synapcores
+    environment:
+      PROXY_SESSION_SECRET: ${PROXY_SESSION_SECRET:?set PROXY_SESSION_SECRET (32+ hex chars)}
+      # The proxy resolves ENV:NAME refs in projects.json; this var name
+      # must match the `ENV:` reference for your project's upstream token.
+      DEMO_SYNAPCORES_TOKEN: ${DEMO_SYNAPCORES_TOKEN:?set DEMO_SYNAPCORES_TOKEN}
+    ports:
+      - "5060:5060"
+    volumes:
+      # Read-only mounts — the proxy never writes to disk.
+      - ./projects.json:/app/projects.json:ro
+      # Built widget bundle (run `cd ../widget && npm run build` first).
+      - ../widget/dist:/app/widget-dist:ro
+
+volumes:
+  synapcores-data:

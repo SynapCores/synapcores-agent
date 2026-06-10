@@ -1,0 +1,79 @@
+# Deploy widget/dist/ to Cloudflare Pages on every push to master that
+# touches widget/ — free tier supports this comfortably (unlimited
+# bandwidth, 500 builds/month, 25 MB file cap; bundle is ~22 KB).
+#
+# Repo secrets required:
+#   CLOUDFLARE_API_TOKEN     — Cloudflare → My Profile → API Tokens →
+#                              "Cloudflare Pages: Edit" template
+#   CLOUDFLARE_ACCOUNT_ID    — Cloudflare → Workers & Pages → right-rail
+#
+# Pages project setup (one-time, via dashboard):
+#   1. Cloudflare → Workers & Pages → Create → Pages → "Direct Upload"
+#   2. Project name: synapcores-widget
+#   3. (Optional) bind a custom domain: cdn.synapcores.com → CNAME pages
+#      target. SSL is automatic.
+#
+# Once published, the bundle is reachable at BOTH:
+#   - https://synapcores-widget.pages.dev/widget.js   (Cloudflare default)
+#   - https://cdn.synapcores.com/widget.js            (custom domain, optional)
+# AND, after npm publish (next job below), at:
+#   - https://cdn.jsdelivr.net/npm/@synapcores/widget/dist/widget.js
+#   - https://unpkg.com/@synapcores/widget/dist/widget.js
+# Two free CDNs by default; three if you keep Cloudflare Pages.
+
+name: widget-cdn
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'widget/**'
+      - '.github/workflows/widget-cdn.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-publish-cloudflare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: widget/package.json
+      - name: Install + build widget
+        working-directory: widget
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          ls -la dist/
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: synapcores-widget
+          directory: widget/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    # Only on tag pushes — npm publish is opinionated; auto-publishing on
+    # every master push would burn version numbers fast.
+    if: startsWith(github.ref, 'refs/tags/widget-v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Build
+        working-directory: widget
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Publish
+        working-directory: widget
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

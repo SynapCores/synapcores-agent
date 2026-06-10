@@ -1,16 +1,34 @@
 {
   "name": "@synapcores/widget",
-  "version": "0.3.0-identity",
-  "description": "Drop-in chat widget powered by SynapCores. Sprint 3 — identify() + persistent conversation across page loads.",
-  "private": true,
+  "version": "0.4.0",
+  "description": "Drop-in chat widget powered by SynapCores. One <script> tag, MIT, browser-side credentials never required.",
   "license": "MIT",
   "type": "module",
   "main": "dist/widget.js",
-  "files": ["dist", "README.md"],
+  "unpkg": "dist/widget.js",
+  "jsdelivr": "dist/widget.js",
+  "files": ["dist", "README.md", "LICENSE"],
+  "keywords": [
+    "chat-widget",
+    "ai",
+    "agent",
+    "memory",
+    "synapcores",
+    "embeddable",
+    "support-widget"
+  ],
+  "homepage": "https://synapcores.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SynapCores/synapcores-agent",
+    "directory": "widget"
+  },
+  "bugs": "https://github.com/SynapCores/synapcores-agent/issues",
   "scripts": {
     "build": "node build.mjs",
     "build:watch": "node build.mjs --watch",
-    "dev": "node build.mjs --watch & python3 -m http.server 5050"
+    "dev": "node build.mjs --watch & python3 -m http.server 5050",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "esbuild": "^0.21.0",

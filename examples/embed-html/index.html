@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acme — Bare HTML embed</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        max-width: 720px;
+        margin: 60px auto;
+        padding: 20px;
+        line-height: 1.6;
+        color: #111;
+      }
+      h1 { margin-top: 0; }
+      pre { background: #f3f4f6; padding: 12px; border-radius: 6px; overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Acme support — embedded chat widget</h1>
+    <p>
+      The floating chat button bottom-right is delivered by the SynapCores
+      widget. The browser holds only an HttpOnly cookie issued by the proxy at
+      <code>https://chat.your.com</code>; all SynapCores credentials live
+      server-side.
+    </p>
+    <pre><code>&lt;script defer
+  src="https://chat.your.com/widget.js"
+  data-api-base="https://chat.your.com"
+  data-project-key="pk_abc123"&gt;&lt;/script&gt;</code></pre>
+
+    <!-- Replace api-base + project-key with your proxy host + project id. -->
+    <script
+      defer
+      src="https://chat.your.com/widget.js"
+      data-api-base="https://chat.your.com"
+      data-project-key="pk_abc123"
+    ></script>
+  </body>
+</html>

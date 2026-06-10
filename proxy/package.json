@@ -6,6 +6,9 @@
   "license": "MIT",
   "type": "module",
   "main": "src/server.js",
+  "bin": {
+    "sc-widget": "bin/sc-widget.js"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js"
