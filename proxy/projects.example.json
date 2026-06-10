@@ -1,0 +1,27 @@
+{
+  "_comment": "Copy to projects.json. Edit. Run.   `cp projects.example.json projects.json`",
+  "server": {
+    "port": 5060,
+    "host": "0.0.0.0",
+    "widget_bundle_path": "../widget/dist/widget.js"
+  },
+  "session": {
+    "secret_env": "PROXY_SESSION_SECRET",
+    "ttl_seconds": 3600,
+    "cookie_name": "sc_session"
+  },
+  "projects": {
+    "pk_demo": {
+      "tenant": "demo",
+      "database": "default",
+      "persona": "support",
+      "agent_name": "SynapCores",
+      "allowed_origins": ["http://localhost:5050", "http://127.0.0.1:5050"],
+      "rate_limit_per_minute": 60,
+      "upstream": {
+        "api_base": "http://localhost:8080",
+        "token": "ENV:DEMO_SYNAPCORES_TOKEN"
+      }
+    }
+  }
+}

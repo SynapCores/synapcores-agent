@@ -25,8 +25,8 @@
  *   - Mobile: full-screen overlay below 480px (CSS-driven)
  */
 
-import { bootstrapToken } from './bootstrap';
 import { type FilledConfig, type WidgetConfig, deriveWsUrl, fillConfig } from './config';
+import { openSession } from './session';
 import { el, trapFocus } from './dom';
 import { renderMarkdown } from './markdown';
 import { applyPosition, applyPrimaryColor, applyTheme } from './theme';
@@ -85,7 +85,7 @@ export class Widget {
   private cfg: FilledConfig;
   private visitor: string;
   private sessionId: string;
-  private token: string;
+  private sessionOpened = false;
   private ws: WsClient | null = null;
   private root: HTMLDivElement;
   private launcher: HTMLButtonElement;
@@ -108,7 +108,6 @@ export class Widget {
     this.cfg = fillConfig(cfg);
     this.visitor = getVisitorId();
     this.sessionId = newSessionId();
-    this.token = this.cfg.token;
     this.titleId = `sc-title-${Math.random().toString(36).slice(2, 8)}`;
     injectStylesOnce();
 
@@ -247,11 +246,13 @@ export class Widget {
     this.sendBtn.disabled = true;
     this.input.disabled = true;
     this.showThinking();
+    // The proxy injects `context.database` + `context.visitor_id` server-side
+    // (and overrides any client-supplied values) — the widget no longer
+    // knows or needs to know the database name.
     const payload: Record<string, unknown> = {
       type: 'send_message',
       session_id: this.sessionId,
       message: t,
-      context: { database: this.cfg.database, visitor_id: this.visitor },
     };
     if (this.cfg.model) payload.model = this.cfg.model;
     this.ws.send(payload);
@@ -270,19 +271,27 @@ export class Widget {
   private async ensureConnected(): Promise<void> {
     if (this.ws && this.ws.status() !== 'closed' && this.ws.status() !== 'error') return;
 
-    if (!this.token) {
+    if (!this.sessionOpened) {
       this.onStatus('connecting');
       try {
-        const resp = await bootstrapToken(this.cfg.apiBase, this.cfg.projectKey, this.visitor);
-        this.token = resp.token;
+        const resp = await openSession(this.cfg.apiBase, this.cfg.projectKey, this.visitor);
+        // Server is the source of truth for visitor_id (it may rewrite it).
+        this.visitor = resp.visitor_id;
+        // Use the server's agent_name when the embedder hasn't overridden it.
+        if (this.cfg.agentName === 'Support' && resp.agent_name) {
+          this.cfg.agentName = resp.agent_name;
+        }
+        this.sessionOpened = true;
       } catch (err) {
-        this.statusBanner.textContent = `Auth failed — ${(err as Error).message}`;
+        this.statusBanner.textContent = `Session failed — ${(err as Error).message}`;
         this.statusBanner.classList.add('sc-status-show');
         return;
       }
     }
 
-    const wsUrl = deriveWsUrl(this.cfg.apiBase, this.token);
+    // No token in the URL — the HttpOnly cookie set by openSession() is what
+    // authenticates the WS upgrade. The browser sends it automatically.
+    const wsUrl = deriveWsUrl(this.cfg.apiBase);
     this.ws = createWsClient({
       url: wsUrl,
       onMessage: (m) => this.onMessage(m as IncomingMsg),

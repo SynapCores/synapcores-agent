@@ -1,30 +1,26 @@
-/* Widget config — defaults, types, data-* attribute parsing.
+/* Widget config — defaults, types, and data-* attribute parsing.
  *
- * Sprint 2 pivot: the widget talks DIRECTLY to the SynapCores gateway's
- * /ws endpoint (AiChatWsMessage protocol). No Python middleware. The
- * gateway requires a JWT — for production embedders the widget bootstraps
- * a short-lived visitor token via POST /v1/widget/token (Sprint 2 gateway
- * work, separate ticket). For development you can paste a manually-
- * obtained admin/user JWT via `data-token`.
+ * Sprint 2 Phase B: widget talks to a Node.js proxy (not the SynapCores
+ * gateway directly). The proxy holds the SynapCores credential; the
+ * browser only holds an HttpOnly cookie issued by the proxy.
+ *
+ * Required surface for embedders:
+ *   - apiBase   — proxy URL (e.g. https://chat.your.com)
+ *   - projectKey— public project id (e.g. pk_abc123)
+ *
+ * The proxy controls everything else (database, persona, allowed origins,
+ * rate limit, upstream credential).
  */
 
 export type Position = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
 export type Theme = 'light' | 'dark' | 'auto';
 
 export interface WidgetConfig {
-  /** SynapCores gateway base URL — e.g. http://localhost:8080 or https://api.your.com.
-   *  WS URL is derived from this (http→ws, https→wss) + "/ws". */
+  /** Widget-proxy URL — e.g. https://chat.your.com or http://localhost:5060. */
   apiBase: string;
-  /** Project public key — passed to /v1/widget/token to look up tenant,
-   *  persona, CORS allowlist, rate limit. Required unless `token` is set
-   *  directly (dev bypass). */
-  projectKey?: string;
-  /** SynapCores database to chat against. Required. */
-  database: string;
-  /** Pre-issued JWT — bypasses /v1/widget/token bootstrap. Dev / admin use only;
-   *  do NOT use in production embed code (browser-visible secret). */
-  token?: string;
-  /** Header label. */
+  /** Project public key — proxy looks up tenant/database/persona/allowed_origins. */
+  projectKey: string;
+  /** Header label override (proxy provides a default per project). */
   agentName?: string;
   /** First message shown when the panel opens. */
   greeting?: string;
@@ -36,14 +32,14 @@ export interface WidgetConfig {
   theme?: Theme;
   /** Show "Powered by SynapCores" footer. Default true. */
   showBranding?: boolean;
-  /** Optional model override for the chat — passed in send_message.model. */
+  /** Optional model override — passed in send_message.model. */
   model?: string;
 }
 
-export type FilledConfig = Required<Omit<WidgetConfig, 'projectKey' | 'token' | 'model'>> & {
-  projectKey: string;
-  token: string;
+export type FilledConfig = Required<Omit<WidgetConfig, 'model' | 'agentName' | 'greeting'>> & {
   model: string;
+  agentName: string;
+  greeting: string;
 };
 
 export const DEFAULTS = {
@@ -68,15 +64,13 @@ function coerceBool(v: string | null | undefined, fallback: boolean): boolean {
 
 export function readConfigFromScript(s: Element): WidgetConfig | null {
   const apiBase = s.getAttribute('data-api-base');
-  const database = s.getAttribute('data-database');
-  if (!apiBase || !database) return null;
+  const projectKey = s.getAttribute('data-project-key');
+  if (!apiBase || !projectKey) return null;
   const position = s.getAttribute('data-position') as Position | null;
   const theme = s.getAttribute('data-theme') as Theme | null;
   return {
     apiBase,
-    database,
-    projectKey: s.getAttribute('data-project-key') ?? undefined,
-    token: s.getAttribute('data-token') ?? undefined,
+    projectKey,
     agentName: s.getAttribute('data-agent-name') ?? undefined,
     greeting: s.getAttribute('data-greeting') ?? undefined,
     primaryColor: s.getAttribute('data-primary-color') ?? undefined,
@@ -91,17 +85,12 @@ export function readConfigFromScript(s: Element): WidgetConfig | null {
 
 export function fillConfig(cfg: WidgetConfig): FilledConfig {
   if (!cfg.apiBase) throw new Error('@synapcores/widget: `apiBase` is required');
-  if (!cfg.database) throw new Error('@synapcores/widget: `database` is required');
-  if (!cfg.projectKey && !cfg.token) {
-    throw new Error(
-      '@synapcores/widget: either `projectKey` (for production bootstrap) or `token` (for dev) is required',
-    );
-  }
+  if (!cfg.projectKey) throw new Error('@synapcores/widget: `projectKey` is required');
   return {
-    apiBase: cfg.apiBase.replace(/\/$/, ''),
-    projectKey: cfg.projectKey ?? '',
-    database: cfg.database,
-    token: cfg.token ?? '',
+    // If the page's <script> tag uses src="/widget.js" with the proxy as
+    // origin, an empty data-api-base should resolve to the current origin.
+    apiBase: cfg.apiBase.replace(/\/$/, '') || window.location.origin,
+    projectKey: cfg.projectKey,
     agentName: cfg.agentName ?? DEFAULTS.agentName,
     greeting: cfg.greeting ?? DEFAULTS.greeting,
     primaryColor: cfg.primaryColor ?? DEFAULTS.primaryColor,
@@ -112,9 +101,9 @@ export function fillConfig(cfg: WidgetConfig): FilledConfig {
   };
 }
 
-/** Derive the WebSocket URL from the apiBase: http→ws, https→wss, append /ws. */
-export function deriveWsUrl(apiBase: string, token: string): string {
+/** Derive the WebSocket URL from the proxy apiBase: http→ws, https→wss, append /ws. */
+export function deriveWsUrl(apiBase: string): string {
   const trimmed = apiBase.replace(/\/$/, '');
   const wsBase = trimmed.replace(/^http(s?):\/\//, (_m, s) => `ws${s}://`);
-  return `${wsBase}/ws?token=${encodeURIComponent(token)}`;
+  return `${wsBase}/ws`;
 }

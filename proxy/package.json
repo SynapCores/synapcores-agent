@@ -1,0 +1,20 @@
+{
+  "name": "@synapcores/widget-proxy",
+  "version": "0.1.0",
+  "description": "Tiny Node.js delivery + WS proxy for @synapcores/widget. Holds the SynapCores credential server-side so the browser never does.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cookie": "^0.6.0",
+    "ws": "^8.18.0"
+  }
+}

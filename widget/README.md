@@ -1,98 +1,98 @@
 # @synapcores/widget
 
 Drop-in chat widget powered by SynapCores. Embed it on any site with one
-`<script>` tag; the SynapCores engine **is** the agent — recall memory + RAG
-+ tool routing + grounded generation run in-DB via `AGENT_RUN()`.
+`<script>` tag; the SynapCores engine is the brain (recall memory + RAG +
+tool routing + grounded generation via `AGENT_RUN()` in-DB).
 
-> **Status — Sprint 2 Phase A (v0.2.0-gateway)**. The widget now talks
-> **directly to the SynapCores gateway** at `/ws` over the `AiChatWsMessage`
-> protocol. No Python middleware, no second process. Phase B (auto-bootstrap
-> via `POST /v1/widget/token` on the gateway) is the next ticket; until it
-> ships, dev/preview use the `data-token` attribute with a manually-issued
-> JWT. Production embedders should always use the bootstrap.
+> **Status — Sprint 2 Phase B (v0.2.1-proxy)**. The widget no longer
+> talks to the SynapCores gateway directly. It talks to a tiny Node.js
+> **proxy** (sibling crate at `../proxy/`) that holds the SynapCores
+> credential server-side. The browser holds only an HttpOnly signed
+> session cookie. See [`../proxy/README.md`](../proxy/README.md) for the
+> proxy setup; see this README for the widget surface.
 
 ---
 
 ## Architecture
 
 ```
-Browser                  SynapCores gateway              In-DB
-─────────                ──────────────────              ─────
-<script widget.js>
-   │ POST /v1/widget/token   ─►  validate project_key,
-   │ (project_key, visitor)      check Origin allowlist,
-   │                             issue ~5 min JWT
-   │ ◄─ {token}
-   │
-   │ WS  /ws?token=<jwt>     ─►  websocket_handler.rs
-   │ {type:"send_message"        AiChatWsMessage
-   │  session_id, message}        │
-   │                              ▼
-   │                       handle_ai_chat_message
-   │                              │
-   │                              ▼
-   │                       chat_engine + AGENT_RUN
-   │                              │
-   │ ◄─ {type:"message_chunk"}    │ (streaming tokens)
-   │ ◄─ {type:"message_complete"} ▼
+Browser                  widget-proxy (Node.js)      SynapCores gateway
+─────────                ──────────────────────       ──────────────────
+<script /widget.js>
+  │ POST /v1/session     ─► validates origin,
+  │  {project_key}          sets HttpOnly cookie
+  │ ◄─ {persona, agent_name, …}
+  │
+  │ WS /ws (cookie auth) ─► verifies cookie,
+  │                         opens upstream WS,
+  │                         pipes AiChatWsMessage   ─► AGENT_RUN in-DB
+  │ ◄─ message_chunk          ◄─                       ◄─
+  │ ◄─ message_complete       ◄─                       ◄─
 ```
 
-One docker container. No Python sidecar. No protocol drift between two
-copies of an "agent loop." Multi-tenancy uses the existing gateway
-tenant/JWT/CORS plumbing.
+Browser holds: an HttpOnly signed cookie. Nothing else.
+Proxy holds: the SynapCores JWT/API key, project allowlist, rate limits.
+SynapCores: runs `AGENT_RUN()` natively.
+
+One credential, one proxy, one engine. No Python, no DB token in JS.
 
 ---
 
-## Install (production, post Phase B)
+## Install (production)
+
+The embedder hosts the proxy. The site author pastes:
 
 ```html
 <script
   defer
-  src="https://cdn.synapcores.com/widget.js"
-  data-api-base="https://your-synapcores.example.com"
-  data-database="default"
+  src="https://chat.your.com/widget.js"
+  data-api-base="https://chat.your.com"
   data-project-key="pk_abc123"
 ></script>
 ```
 
-The widget POSTs the project key + a generated visitor id at first open,
-gets back a ~5-minute scoped JWT, opens WS. The Origin header is validated
-server-side against the project's `allowed_origins` allowlist (the gateway
-config defines that), so the embed code is safe to publish on a public page
-even though it identifies the project.
+Where `https://chat.your.com` is the widget-proxy URL. The proxy's
+`projects.json` defines `pk_abc123` with its tenant, database, persona,
+upstream SynapCores credential, allowed origins, and rate limit.
 
-## Install (dev — Phase B not yet shipped)
+For cross-origin embeds (proxy on a different origin from the host site),
+set `session.same_site_none = true` in the proxy config — required for
+the cookie to travel cross-origin. HTTPS is then mandatory.
 
-```html
-<script
-  defer
-  src="/dist/widget.js"
-  data-api-base="http://localhost:8080"
-  data-database="default"
-  data-token="<paste a JWT here>"
-></script>
+## Install (development)
+
+```bash
+# Run the proxy (this also serves the widget bundle and a dev landing page)
+cd ../proxy
+npm install
+export PROXY_SESSION_SECRET="$(openssl rand -hex 32)"
+export DEMO_SYNAPCORES_TOKEN="<a JWT from your SynapCores /v1/auth/login>"
+cp projects.example.json projects.json
+npm start                                   # http://127.0.0.1:5060
+
+# Iterate on widget code (rebuilds dist/widget.js on every save)
+cd ../widget
+npm run dev
 ```
 
-See `dev/RUN_AGAINST_SYNAPCORES.md` for the full curl flow to obtain a
-JWT (docker run → `/v1/auth/login` → paste).
+Open <http://127.0.0.1:5060/>. The proxy renders a dev landing page
+script-tagging the widget against the first configured project.
 
 ---
 
 ## Config
 
-| Attribute              | Default          | Notes                                                    |
-| ---------------------- | ---------------- | -------------------------------------------------------- |
-| `data-api-base`        | _(required)_     | SynapCores gateway base URL (e.g. `https://api.your.com`)|
-| `data-database`        | _(required)_     | Which database in the SynapCores tenant to chat against  |
-| `data-project-key`     | _(required\*)_   | Project public key for bootstrap (* OR `data-token`)     |
-| `data-token`           | _(none)_         | Manual JWT — dev/preview only, never in production       |
-| `data-agent-name`      | `Support`        | Header label                                             |
-| `data-greeting`        | sensible default | First message shown when the panel opens                 |
-| `data-primary-color`   | `#00bfff`        | Any CSS color string                                     |
-| `data-position`        | `bottom-right`   | `bottom-right` / `bottom-left` / `top-right` / `top-left`|
-| `data-theme`           | `auto`           | `light` / `dark` / `auto`                                |
-| `data-show-branding`   | `true`           | Set `false` to hide the "Powered by SynapCores" footer   |
-| `data-model`           | server default   | Optional override for `send_message.model`               |
+| Attribute              | Default              | Notes                                                    |
+| ---------------------- | -------------------- | -------------------------------------------------------- |
+| `data-api-base`        | _(required)_         | widget-proxy URL                                         |
+| `data-project-key`     | _(required)_         | proxy looks up tenant/database/persona/allowed_origins   |
+| `data-agent-name`      | proxy default        | Header label (proxy supplies per-project default)        |
+| `data-greeting`        | sensible             | First message shown when the panel opens                 |
+| `data-primary-color`   | `#00bfff`            | Any CSS color                                            |
+| `data-position`        | `bottom-right`       | `bottom-right` / `bottom-left` / `top-right` / `top-left`|
+| `data-theme`           | `auto`               | `light` / `dark` / `auto`                                |
+| `data-show-branding`   | `true`               | Set `false` to hide "Powered by SynapCores"              |
+| `data-model`           | server default       | Optional override sent in `send_message.model`           |
 
 Or via JS API:
 
@@ -101,10 +101,8 @@ Or via JS API:
 <script>
   window.addEventListener('DOMContentLoaded', () => {
     const w = window.SynapCores.init({
-      apiBase: 'https://api.your.com',
-      database: 'default',
+      apiBase: 'https://chat.your.com',
       projectKey: 'pk_abc123',
-      agentName: 'Support',
       primaryColor: '#7c3aed',
     });
     // w.open(), w.close(), w.toggle(), w.send(text), w.destroy()
@@ -114,47 +112,40 @@ Or via JS API:
 
 ---
 
-## What's in Sprint 2 Phase A
+## What this widget does on the wire
 
-- **Direct-to-gateway wire** — `send_message` / `message_chunk` /
-  `message_complete` / `tool_result` / `error` / `pong`. Matches
-  `crates/aidb-gateway/src/websocket/ai_chat_handler.rs::AiChatWsMessage`
-  exactly.
-- **Streaming render** — chunks accumulate into an in-progress agent
-  bubble; on `message_complete` it re-renders with full markdown.
-- **Bootstrap step** — `POST /v1/widget/token` with `{project_key,
-  visitor_id}`. Used when `data-token` is not set.
-- **Manual-token bypass** — `data-token` for development before
-  Phase B ships.
-- **Session id** — one UUID per widget mount; keys per-conversation memory.
-- All Sprint 1 polish kept: theming, dark mode, mobile overlay, animated
-  dots, exponential-backoff reconnect, ARIA dialog + focus trap + ESC,
-  scoped CSS, safe markdown.
+| Browser → proxy → upstream                                | Direction |
+| --------------------------------------------------------- | --------- |
+| `POST /v1/session {project_key, visitor_id?}`             | HTTPS     |
+| `WS /ws` upgrade (cookie auth)                            | Browser → proxy |
+| `{type:"send_message", session_id, message, model?}`      | Browser → proxy |
+| `{type:"message_chunk", message_id, session_id, chunk}`   | Proxy → browser |
+| `{type:"message_complete", message_id, full_message}`     | Proxy → browser |
+| `{type:"error", message, code}`                           | Proxy → browser |
 
-## What's still pending
-
-- **Phase B — gateway endpoint** (next ticket): `POST /v1/widget/token`
-  Rust handler, `[[widget.projects]]` config section, CORS allowlist on
-  `/ws` per project, short-lived JWT issuance.
-- `identify({name, email})` — Sprint 3.
-- Persistent conversation across page loads — Sprint 3.
-- CDN + npm publish — Sprint 4.
+The proxy injects `context.database` and `context.visitor_id` upstream —
+the widget cannot point at another tenant's database, and tries to
+`execute_sql` from the browser are silently dropped at the proxy.
 
 ---
 
-## Build
+## What's in Sprint 2 Phase B
 
-```bash
-npm install
-npm run build       # → dist/widget.js (21.6 KB minified, CSS inlined)
-npm run dev         # esbuild watch + http.server widget/ on :5050
-                    # then open http://localhost:5050/dev/
-```
+- **`session.ts`** replaces `bootstrap.ts` — no JWT lives in JS at all
+- **`config.ts`** simplified — embedder only knows `apiBase` + `projectKey`
+- **Cookie-auth WS** — `new WebSocket(url)` sends the proxy's cookie
+  automatically (same-origin; cross-origin requires SameSite=None+HTTPS)
+- All Sprint 1 polish kept: theming, dark mode, mobile overlay, animated
+  dots, exponential-backoff reconnect, ARIA + focus trap + ESC, safe
+  markdown rendering.
 
-## Verify
+## What's pending
 
-See `dev/RUN_AGAINST_SYNAPCORES.md` — five steps: docker run, get JWT,
-paste into `dev/index.html`, `npm run dev`, open the page.
+- **Sprint 3**: `identify({name, email})`, persistent conversation
+  across page loads, source-link chips for KB grounding.
+- **Sprint 4**: CDN publishing, npm `@synapcores/widget` publish, full
+  docker-compose with synapcores + proxy + sample project, Dockerfile
+  for the proxy.
 
 ---
 
@@ -163,15 +154,23 @@ paste into `dev/index.html`, `npm run dev`, open the page.
 ```
 widget/src/
   index.ts        public API + auto-init from <script data-*>
-  widget.ts       UI + bootstrap + AiChatWsMessage protocol
-  config.ts       types, defaults, data-* parsing, deriveWsUrl()
-  bootstrap.ts    POST /v1/widget/token (the auto path)
+  widget.ts      UI + session bootstrap + AiChatWsMessage protocol
+  config.ts      types, defaults, data-* parsing, deriveWsUrl()
+  session.ts     POST /v1/session (cookie-set, no token in response body)
   visitor.ts     crypto.randomUUID() → localStorage → cookie → in-memory
-  ws.ts           WebSocket with 1/2/4/8/16s backoff reconnect
-  theme.ts        primary color + position + dark/light auto
-  dom.ts          el() factory + focus-trap helper
-  markdown.ts     safe MD renderer (bold/italic/code/links, http(s) only)
-  styles.css      scoped under .sc-widget-root, inlined into the bundle
+  ws.ts          WebSocket with exponential-backoff reconnect
+  theme.ts       primary color + position + dark/light auto
+  dom.ts         el() factory + focus-trap helper
+  markdown.ts    safe markdown renderer
+  styles.css     scoped, inlined into the bundle at build time
+```
+
+## Build
+
+```bash
+npm install
+npm run build       # → dist/widget.js (21.3 KB minified, CSS inlined)
+npm run dev         # esbuild watch only (proxy serves the bundle)
 ```
 
 ## License
