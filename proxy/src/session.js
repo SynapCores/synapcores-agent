@@ -100,3 +100,21 @@ export function verifySessionCookie(headerValue, { secret, cookieName, ttlSecond
 export function newVisitorId() {
   return crypto.randomUUID();
 }
+
+/**
+ * Deterministic per-visitor-per-project chat session id.
+ *
+ * HMAC(secret, "scs1:" + visitorId + ":" + projectKey), b64url-truncated.
+ * Recoverable across proxy restarts without any in-memory state, and the
+ * `scs1:` prefix lets us re-key the derivation in a future migration if
+ * we ever need to.
+ */
+export function deriveSessionId(secret, visitorId, projectKey) {
+  const digest = crypto.createHmac('sha256', secret).update(`scs1:${visitorId}:${projectKey}`).digest();
+  return Buffer.from(digest)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+    .slice(0, 22);
+}

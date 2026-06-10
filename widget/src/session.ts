@@ -26,6 +26,8 @@ export interface SessionResponse {
   agent_name: string;
   database: string;
   visitor_id: string;
+  /** Server-supplied deterministic chat session id (HMAC(secret, visitor+project)). */
+  session_id: string;
 }
 
 export async function openSession(
@@ -44,4 +46,49 @@ export async function openSession(
     throw new Error(`session failed: ${res.status} ${res.statusText} — ${text}`);
   }
   return (await res.json()) as SessionResponse;
+}
+
+export interface IdentifyAttrs {
+  name?: string;
+  email?: string;
+  id?: string;
+  attrs?: Record<string, unknown>;
+}
+
+export async function postIdentify(apiBase: string, body: IdentifyAttrs): Promise<void> {
+  const res = await fetch(`${apiBase}/v1/identify`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '(no body)');
+    throw new Error(`identify failed: ${res.status} ${res.statusText} — ${text}`);
+  }
+}
+
+export interface HistoryTurn {
+  role: 'user' | 'agent' | string;
+  content: string;
+}
+
+export async function fetchHistory(apiBase: string, limit = 40): Promise<HistoryTurn[]> {
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}/v1/history?limit=${limit}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+  } catch {
+    return [];
+  }
+  if (!res.ok) return [];
+  let body: { turns?: HistoryTurn[] };
+  try {
+    body = (await res.json()) as { turns?: HistoryTurn[] };
+  } catch {
+    return [];
+  }
+  return Array.isArray(body.turns) ? body.turns : [];
 }

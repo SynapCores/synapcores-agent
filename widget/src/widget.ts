@@ -26,7 +26,13 @@
  */
 
 import { type FilledConfig, type WidgetConfig, deriveWsUrl, fillConfig } from './config';
-import { openSession } from './session';
+import {
+  type HistoryTurn,
+  type IdentifyAttrs,
+  fetchHistory,
+  openSession,
+  postIdentify,
+} from './session';
 import { el, trapFocus } from './dom';
 import { renderMarkdown } from './markdown';
 import { applyPosition, applyPrimaryColor, applyTheme } from './theme';
@@ -84,8 +90,20 @@ function chatIcon(): SVGSVGElement {
 export class Widget {
   private cfg: FilledConfig;
   private visitor: string;
-  private sessionId: string;
+  /** Set when openSession() returns. Server-controlled (HMAC over visitor + project). */
+  private sessionId = '';
   private sessionOpened = false;
+  /** Identity queued before the session opens — replayed once the cookie is set. */
+  private pendingIdentify: IdentifyAttrs | null = null;
+  /** Cached identity, exposed via the `identity` getter. We never thread it
+   *  through `send_message` — the proxy injects it server-side, single
+   *  source of truth. */
+  private identifiedAs: IdentifyAttrs | null = null;
+  /** Read-only view of the identity submitted via `identify()`. */
+  get identity(): IdentifyAttrs | null {
+    return this.identifiedAs;
+  }
+  private historyLoaded = false;
   private ws: WsClient | null = null;
   private root: HTMLDivElement;
   private launcher: HTMLButtonElement;
@@ -107,6 +125,9 @@ export class Widget {
   constructor(cfg: WidgetConfig) {
     this.cfg = fillConfig(cfg);
     this.visitor = getVisitorId();
+    // sessionId is filled in by openSession(); newSessionId() is the
+    // pre-session local placeholder (unused once cookie is set, kept so
+    // the field is never falsy if we ever call .send() pre-session).
     this.sessionId = newSessionId();
     this.titleId = `sc-title-${Math.random().toString(36).slice(2, 8)}`;
     injectStylesOnce();
@@ -246,9 +267,10 @@ export class Widget {
     this.sendBtn.disabled = true;
     this.input.disabled = true;
     this.showThinking();
-    // The proxy injects `context.database` + `context.visitor_id` server-side
-    // (and overrides any client-supplied values) — the widget no longer
-    // knows or needs to know the database name.
+    // The proxy injects `context.database` + `context.visitor_id` + user
+    // identity + overrides session_id with the deterministic server value.
+    // The widget passes the session_id it has cached as a hint; the proxy
+    // re-derives the canonical one regardless.
     const payload: Record<string, unknown> = {
       type: 'send_message',
       session_id: this.sessionId,
@@ -256,6 +278,29 @@ export class Widget {
     };
     if (this.cfg.model) payload.model = this.cfg.model;
     this.ws.send(payload);
+  }
+
+  /**
+   * Identify the visitor. Called by the host site when it knows who the
+   * visitor is (logged-in user, CRM contact). The proxy stores the
+   * identity and injects it into `send_message.context.user` server-side
+   * so AGENT_RUN sees an identified visitor instead of an anonymous one.
+   *
+   * Safe to call before the panel opens — the call is queued and replayed
+   * once the session cookie is set. Safe to call again to update.
+   */
+  identify(attrs: IdentifyAttrs): void {
+    this.identifiedAs = attrs;
+    if (!this.sessionOpened) {
+      this.pendingIdentify = attrs;
+      // Don't trigger session open just for identify — wait until the
+      // visitor actually opens the chat. The identify will fire then.
+      return;
+    }
+    void postIdentify(this.cfg.apiBase, attrs).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('@synapcores/widget identify failed:', (err as Error).message);
+    });
   }
 
   destroy(): void {
@@ -275,9 +320,8 @@ export class Widget {
       this.onStatus('connecting');
       try {
         const resp = await openSession(this.cfg.apiBase, this.cfg.projectKey, this.visitor);
-        // Server is the source of truth for visitor_id (it may rewrite it).
         this.visitor = resp.visitor_id;
-        // Use the server's agent_name when the embedder hasn't overridden it.
+        this.sessionId = resp.session_id;
         if (this.cfg.agentName === 'Support' && resp.agent_name) {
           this.cfg.agentName = resp.agent_name;
         }
@@ -287,16 +331,40 @@ export class Widget {
         this.statusBanner.classList.add('sc-status-show');
         return;
       }
+      // Flush any identify() call that landed before the session opened.
+      if (this.pendingIdentify) {
+        const pending = this.pendingIdentify;
+        this.pendingIdentify = null;
+        void postIdentify(this.cfg.apiBase, pending).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn('@synapcores/widget identify failed:', (err as Error).message);
+        });
+      }
+      // Load history (best-effort — failures fall back to the greeting).
+      if (!this.historyLoaded) {
+        this.historyLoaded = true;
+        const turns = await fetchHistory(this.cfg.apiBase, 40);
+        if (turns.length > 0) this.renderHistory(turns);
+      }
     }
 
-    // No token in the URL — the HttpOnly cookie set by openSession() is what
-    // authenticates the WS upgrade. The browser sends it automatically.
     const wsUrl = deriveWsUrl(this.cfg.apiBase);
     this.ws = createWsClient({
       url: wsUrl,
       onMessage: (m) => this.onMessage(m as IncomingMsg),
       onStatus: (s) => this.onStatus(s),
     });
+  }
+
+  private renderHistory(turns: HistoryTurn[]): void {
+    // Replace the mounted greeting bubble with the historical turns so the
+    // visitor sees the conversation they had before, not a stale "Hi! How
+    // can I help?" header above stuff they already said.
+    while (this.messages.firstChild) this.messages.removeChild(this.messages.firstChild);
+    for (const t of turns) {
+      const from: 'user' | 'agent' = t.role === 'user' ? 'user' : 'agent';
+      this.addBubble(from, t.content);
+    }
   }
 
   private onStatus(s: 'connecting' | 'open' | 'closed' | 'error'): void {

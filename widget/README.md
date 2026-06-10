@@ -106,6 +106,18 @@ Or via JS API:
       primaryColor: '#7c3aed',
     });
     // w.open(), w.close(), w.toggle(), w.send(text), w.destroy()
+
+    // When you know who the visitor is — e.g. after a login event —
+    // call identify(). The proxy stores it and AGENT_RUN sees the
+    // visitor as identified on every subsequent turn:
+    w.identify({
+      id: 'u_42',
+      name: 'Luis',
+      email: 'luis@example.com',
+      attrs: { plan: 'pro' },
+    });
+    // Or call from the global — applies to every mounted widget:
+    window.SynapCores.identify({ id: 'u_42', name: 'Luis' });
   });
 </script>
 ```
@@ -129,23 +141,29 @@ the widget cannot point at another tenant's database, and tries to
 
 ---
 
-## What's in Sprint 2 Phase B
+## What's in Sprint 3 (v0.3.0-identity)
 
-- **`session.ts`** replaces `bootstrap.ts` — no JWT lives in JS at all
-- **`config.ts`** simplified — embedder only knows `apiBase` + `projectKey`
-- **Cookie-auth WS** — `new WebSocket(url)` sends the proxy's cookie
-  automatically (same-origin; cross-origin requires SameSite=None+HTTPS)
-- All Sprint 1 polish kept: theming, dark mode, mobile overlay, animated
-  dots, exponential-backoff reconnect, ARIA + focus trap + ESC, safe
-  markdown rendering.
+- **`identify(attrs)`** on the Widget instance + `window.SynapCores.identify(attrs)`
+  global. Stored on the proxy and threaded into `send_message.context.user`
+  server-side — AGENT_RUN sees an identified visitor on every turn.
+  Safe to call before the panel opens; replayed once the session cookie
+  is set. The proxy holds it in-memory keyed by visitor id (TTL 24h);
+  persisting to SynapCores is a future hardening pass.
+- **Persistent conversation across page loads + days.** Server-supplied
+  deterministic `session_id` (HMAC of secret + visitor + project) replaces
+  the per-mount UUID. On open, the widget fetches `GET /v1/history` and
+  re-renders prior turns before showing the composer — visitors returning
+  later see the conversation they had.
+- **`widget.identity`** read-only getter — what the embedder last
+  identified (useful for debug overlays).
+- All Sprint 1/2 polish unchanged.
 
 ## What's pending
 
-- **Sprint 3**: `identify({name, email})`, persistent conversation
-  across page loads, source-link chips for KB grounding.
-- **Sprint 4**: CDN publishing, npm `@synapcores/widget` publish, full
-  docker-compose with synapcores + proxy + sample project, Dockerfile
-  for the proxy.
+- **Sprint 4** (#321): CDN publish (Cloudflare Pages — free), npm
+  `@synapcores/widget` publish, Dockerfile for the proxy, docker-compose
+  with synapcores + proxy + first project, minimal admin HTML page,
+  example embeds (bare HTML / Next.js / WordPress).
 
 ---
 

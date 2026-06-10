@@ -1,7 +1,7 @@
 {
   "name": "@synapcores/widget-proxy",
-  "version": "0.1.0",
-  "description": "Tiny Node.js delivery + WS proxy for @synapcores/widget. Holds the SynapCores credential server-side so the browser never does.",
+  "version": "0.2.0",
+  "description": "Tiny Node.js delivery + WS proxy for @synapcores/widget. Holds the SynapCores credential, issues HttpOnly sessions, retrieves history, threads identity into AGENT_RUN.",
   "private": true,
   "license": "MIT",
   "type": "module",

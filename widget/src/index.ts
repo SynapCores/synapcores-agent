@@ -8,12 +8,16 @@
  */
 
 import { type WidgetConfig, readConfigFromScript } from './config';
+import type { IdentifyAttrs } from './session';
 import { Widget } from './widget';
 
 declare const __SC_WIDGET_VERSION__: string;
 
 interface PublicAPI {
   init(cfg: WidgetConfig): Widget;
+  /** Identify the visitor on EVERY current Widget instance. Convenience for
+   *  the common case where a host site has one widget on the page. */
+  identify(attrs: IdentifyAttrs): void;
   version: string;
 }
 
@@ -24,6 +28,9 @@ const api: PublicAPI = {
     const w = new Widget(cfg);
     instances.push(w);
     return w;
+  },
+  identify(attrs: IdentifyAttrs): void {
+    for (const w of instances) w.identify(attrs);
   },
   version: __SC_WIDGET_VERSION__,
 };

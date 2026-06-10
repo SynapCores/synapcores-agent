@@ -24,8 +24,15 @@ import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import { loadConfig } from './config.js';
 import { connectUpstream } from './upstream.js';
+import { fetchHistory } from './upstream_rest.js';
 import { take as takeRate } from './ratelimit.js';
-import { makeSessionCookie, newVisitorId, verifySessionCookie } from './session.js';
+import {
+  deriveSessionId,
+  makeSessionCookie,
+  newVisitorId,
+  verifySessionCookie,
+} from './session.js';
+import { getIdentity, setIdentity } from './identity.js';
 
 const projectsPath = process.env.PROXY_PROJECTS ?? './projects.json';
 const config = loadConfig(projectsPath);
@@ -215,6 +222,9 @@ more.)</p>
       projectKey,
       sameSiteNone: config.same_site_none,
     });
+    // Deterministic per-(visitor, project) chat session id — survives
+    // proxy restart, no server-side state needed.
+    const sessionId = deriveSessionId(config.session_secret, visitorId, projectKey);
     return send(
       res,
       200,
@@ -224,9 +234,85 @@ more.)</p>
         agent_name: project.agent_name,
         database: project.database,
         visitor_id: visitorId,
+        session_id: sessionId,
       },
       { 'set-cookie': cookie, ...corsHeaders(origin, project) },
     );
+  }
+
+  // -------- POST /v1/identify --------
+  // Cookie-authenticated. Stores caller-supplied identity for the visitor;
+  // the proxy injects it into context.user on subsequent send_message
+  // frames so AGENT_RUN sees the visitor as identified instead of
+  // anonymous. Payload is shallow-validated (string fields only); attrs
+  // is forwarded verbatim with a size cap.
+  if (req.method === 'POST' && url.pathname === '/v1/identify') {
+    const session = verifySessionCookie(req.headers.cookie, {
+      secret: config.session_secret,
+      cookieName: config.cookie_name,
+      ttlSeconds: config.session_ttl_seconds,
+    });
+    if (!session) return send(res, 401, { error: 'no session' });
+    const project = config.projects[session.projectKey];
+    if (!project || !originAllowed(origin, project)) {
+      return send(res, 403, { error: 'origin not allowed' });
+    }
+    let body;
+    try {
+      body = await readJson(req, 8 * 1024);
+    } catch (err) {
+      return send(res, 400, `bad json: ${err.message}`);
+    }
+    const identity = {
+      name: typeof body?.name === 'string' ? body.name.slice(0, 200) : undefined,
+      email: typeof body?.email === 'string' ? body.email.slice(0, 320) : undefined,
+      id: typeof body?.id === 'string' ? body.id.slice(0, 200) : undefined,
+      attrs:
+        body?.attrs && typeof body.attrs === 'object' && !Array.isArray(body.attrs)
+          ? body.attrs
+          : undefined,
+    };
+    setIdentity(session.visitorId, identity);
+    return send(res, 200, { ok: true }, corsHeaders(origin, project));
+  }
+
+  // -------- GET /v1/history --------
+  // Cookie-auth. Returns the last N messages for THIS visitor's deterministic
+  // session_id (computed server-side — the visitor cannot read another
+  // session's history). Backed by SynapCores's existing
+  // GET /v1/chat/sessions/{id}/messages REST endpoint.
+  if (req.method === 'GET' && url.pathname === '/v1/history') {
+    const session = verifySessionCookie(req.headers.cookie, {
+      secret: config.session_secret,
+      cookieName: config.cookie_name,
+      ttlSeconds: config.session_ttl_seconds,
+    });
+    if (!session) return send(res, 401, { error: 'no session' });
+    const project = config.projects[session.projectKey];
+    if (!project || !originAllowed(origin, project)) {
+      return send(res, 403, { error: 'origin not allowed' });
+    }
+    const sessionId = deriveSessionId(
+      config.session_secret,
+      session.visitorId,
+      session.projectKey,
+    );
+    const limit = Math.min(Number(url.searchParams.get('limit') ?? 40), 100);
+    const messages = await fetchHistory({
+      apiBase: project.upstream_api_base,
+      token: project.upstream_token,
+      sessionId,
+      pageSize: limit,
+    });
+    // Normalize to {role, content} so widget rendering is shape-stable
+    // regardless of upstream schema drift.
+    const turns = messages
+      .map((m) => ({
+        role: typeof m.role === 'string' ? m.role : 'user',
+        content: typeof m.content === 'string' ? m.content : '',
+      }))
+      .filter((t) => t.content);
+    return send(res, 200, { session_id: sessionId, turns }, corsHeaders(origin, project));
   }
 
   return send(res, 404, 'not found');
@@ -327,12 +413,24 @@ function handleClient(client, project, session) {
         );
         return;
       }
-      // Force database to project config — embedders cannot point at
-      // another tenant's data.
+      // Server-controlled context. The proxy:
+      //   - forces `database` to the project's config (no cross-tenant peek)
+      //   - injects the cookie-derived visitor_id
+      //   - forces `session_id` to the deterministic per-visitor value
+      //     (the widget computes the same value, but never trust the
+      //     client-supplied id — the proxy is the source of truth)
+      //   - injects identity from /v1/identify, if any
+      const identity = getIdentity(session.visitorId);
+      msg.session_id = deriveSessionId(
+        config.session_secret,
+        session.visitorId,
+        project.key,
+      );
       msg.context = {
         ...(msg.context ?? {}),
         database: project.database,
         visitor_id: session.visitorId,
+        ...(identity ? { user: identity } : {}),
       };
     }
     upstream.send(msg);

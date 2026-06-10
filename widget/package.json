@@ -1,7 +1,7 @@
 {
   "name": "@synapcores/widget",
-  "version": "0.2.1-proxy",
-  "description": "Drop-in chat widget powered by SynapCores. Sprint 2 Phase B — talks to @synapcores/widget-proxy; browser holds only an HttpOnly cookie.",
+  "version": "0.3.0-identity",
+  "description": "Drop-in chat widget powered by SynapCores. Sprint 3 — identify() + persistent conversation across page loads.",
   "private": true,
   "license": "MIT",
   "type": "module",
