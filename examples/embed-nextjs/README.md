@@ -4,6 +4,8 @@ Two paths — pick one.
 
 ## A. Script tag in `app/layout.tsx` (SSR-friendly, no React state)
 
+Two source options — pick one:
+
 ```tsx
 // app/layout.tsx
 import Script from 'next/script';
@@ -13,12 +15,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         {children}
+        {/* Option 1 — jsDelivr CDN with version pinning + SRI (recommended) */}
+        <Script
+          src="https://cdn.jsdelivr.net/npm/@synapcores/widget@0.4.0/dist/widget.js"
+          integrity="sha384-rn44GdC0gnzNPwhJYHl4TEzahTnCGWtcE/N7QJZ1T5L+Sta8Bh/2d4lga2FaM4NB"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+          data-api-base="https://chat.your.com"
+          data-project-key={process.env.NEXT_PUBLIC_SYNAPCORES_PROJECT_KEY}
+        />
+        {/* Option 2 — proxy-hosted (uncomment if you prefer no CDN dep)
         <Script
           src="https://chat.your.com/widget.js"
           strategy="afterInteractive"
           data-api-base="https://chat.your.com"
           data-project-key={process.env.NEXT_PUBLIC_SYNAPCORES_PROJECT_KEY}
-        />
+        /> */}
       </body>
     </html>
   );

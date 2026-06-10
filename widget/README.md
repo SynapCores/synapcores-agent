@@ -40,20 +40,30 @@ One credential, one proxy, one engine. No Python, no DB token in JS.
 
 ## Install (production)
 
-The embedder hosts the proxy. The site author pastes:
+The embedder hosts the proxy. The site author pastes one of:
 
 ```html
-<script
-  defer
+<!-- A. jsDelivr CDN, version-pinned + SRI (recommended) -->
+<script defer
+  src="https://cdn.jsdelivr.net/npm/@synapcores/widget@0.4.0/dist/widget.js"
+  integrity="sha384-rn44GdC0gnzNPwhJYHl4TEzahTnCGWtcE/N7QJZ1T5L+Sta8Bh/2d4lga2FaM4NB"
+  crossorigin="anonymous"
+  data-api-base="https://chat.your.com"
+  data-project-key="pk_abc123"></script>
+
+<!-- B. Proxy-hosted (no external CDN dep) -->
+<script defer
   src="https://chat.your.com/widget.js"
   data-api-base="https://chat.your.com"
-  data-project-key="pk_abc123"
-></script>
+  data-project-key="pk_abc123"></script>
 ```
 
 Where `https://chat.your.com` is the widget-proxy URL. The proxy's
 `projects.json` defines `pk_abc123` with its tenant, database, persona,
-upstream SynapCores credential, allowed origins, and rate limit.
+upstream SynapCores credential, allowed origins, and rate limit. The
+widget bundle on jsDelivr/unpkg is identical to what the proxy serves
+at `/widget.js` — the only difference is the source the browser fetches
+it from.
 
 For cross-origin embeds (proxy on a different origin from the host site),
 set `session.same_site_none = true` in the proxy config — required for

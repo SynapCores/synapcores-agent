@@ -14,26 +14,48 @@
         color: #111;
       }
       h1 { margin-top: 0; }
-      pre { background: #f3f4f6; padding: 12px; border-radius: 6px; overflow-x: auto; }
+      pre { background: #f3f4f6; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 13px; }
+      h3 { margin-top: 32px; }
     </style>
   </head>
   <body>
     <h1>Acme support — embedded chat widget</h1>
     <p>
-      The floating chat button bottom-right is delivered by the SynapCores
-      widget. The browser holds only an HttpOnly cookie issued by the proxy at
-      <code>https://chat.your.com</code>; all SynapCores credentials live
-      server-side.
+      The floating chat button bottom-right is delivered from the
+      <strong>jsDelivr CDN</strong>; sessions + WS proxy through your
+      <code>@synapcores/widget-proxy</code>. The browser holds only an
+      HttpOnly cookie; all SynapCores credentials live server-side.
     </p>
+
+    <h3>Recommended — CDN delivery + SRI pinning</h3>
+    <p>Public CDN, version-pinned, tamper-proof:</p>
+    <pre><code>&lt;script defer
+  src="https://cdn.jsdelivr.net/npm/@synapcores/widget@0.4.0/dist/widget.js"
+  integrity="sha384-rn44GdC0gnzNPwhJYHl4TEzahTnCGWtcE/N7QJZ1T5L+Sta8Bh/2d4lga2FaM4NB"
+  crossorigin="anonymous"
+  data-api-base="https://chat.your.com"
+  data-project-key="pk_abc123"&gt;&lt;/script&gt;</code></pre>
+
+    <h3>Alternative — proxy-hosted (no CDN dep)</h3>
+    <p>If you'd rather not depend on an external CDN, your proxy already serves the same bundle at <code>/widget.js</code>:</p>
     <pre><code>&lt;script defer
   src="https://chat.your.com/widget.js"
   data-api-base="https://chat.your.com"
   data-project-key="pk_abc123"&gt;&lt;/script&gt;</code></pre>
 
-    <!-- Replace api-base + project-key with your proxy host + project id. -->
+    <h3>Mirrors</h3>
+    <ul>
+      <li><code>https://cdn.jsdelivr.net/npm/@synapcores/widget@0.4.0/dist/widget.js</code></li>
+      <li><code>https://unpkg.com/@synapcores/widget@0.4.0/dist/widget.js</code></li>
+      <li><code>https://chat.your.com/widget.js</code> (your proxy)</li>
+    </ul>
+
+    <!-- Live embed below. Replace data-api-base + data-project-key with your proxy host + project id. -->
     <script
       defer
-      src="https://chat.your.com/widget.js"
+      src="https://cdn.jsdelivr.net/npm/@synapcores/widget@0.4.0/dist/widget.js"
+      integrity="sha384-rn44GdC0gnzNPwhJYHl4TEzahTnCGWtcE/N7QJZ1T5L+Sta8Bh/2d4lga2FaM4NB"
+      crossorigin="anonymous"
       data-api-base="https://chat.your.com"
       data-project-key="pk_abc123"
     ></script>
