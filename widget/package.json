@@ -24,6 +24,9 @@
     "directory": "widget"
   },
   "bugs": "https://github.com/SynapCores/synapcores-agent/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node build.mjs",
     "build:watch": "node build.mjs --watch",
